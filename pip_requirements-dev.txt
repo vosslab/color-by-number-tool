@@ -1,6 +1,7 @@
 # Development dependencies
 bandit  # security linting for Python code
 packaging  # version parsing/comparison helpers used by tooling/tests
+pypdf  # PDF page-count and page-size verification
 pyflakes  # static analysis lint checks
 pytest  # automated test runner
 rich  # formatted terminal output in developer tools

@@ -1,0 +1,150 @@
+name: Aoartix 48 color alcohol markers
+source:
+  image: palettes/marker_image_set.jpg
+  method: Median RGB value inside each flat chart swatch
+  limitation: Chart colors approximate the printed marker ink on paper
+colors:
+  - code: "137"
+    name: Medium Pink
+    rgb: [255, 222, 255]
+  - code: "147"
+    name: Pale Lilac
+    rgb: [255, 186, 251]
+  - code: "89"
+    name: Pale Purple
+    rgb: [254, 171, 239]
+  - code: "84"
+    name: Pastel Violet
+    rgb: [254, 184, 247]
+  - code: "6"
+    name: Vivid Pink
+    rgb: [255, 128, 217]
+  - code: "125"
+    name: Fluorescent Rose
+    rgb: [255, 111, 196]
+  - code: "85"
+    name: Vivid Purple
+    rgb: [215, 81, 176]
+  - code: "87"
+    name: Azalea Purple
+    rgb: [177, 79, 182]
+  - code: "120"
+    name: Black
+    rgb: [14, 14, 14]
+  - code: "66"
+    name: Baby Blue
+    rgb: [171, 245, 254]
+  - code: "63"
+    name: Cerulean Blue
+    rgb: [114, 212, 249]
+  - code: "76"
+    name: Sky Blue
+    rgb: [94, 168, 255]
+  - code: "69"
+    name: Prussian Blue
+    rgb: [82, 99, 151]
+  - code: "72"
+    name: Napoleon Blue
+    rgb: [61, 77, 172]
+  - code: "70"
+    name: Royal Blue
+    rgb: [71, 127, 238]
+  - code: "81"
+    name: Deep Violet
+    rgb: [125, 59, 165]
+  - code: "47"
+    name: Grass Green
+    rgb: [170, 239, 122]
+  - code: "48"
+    name: Yellow Green
+    rgb: [200, 216, 94]
+  - code: "174"
+    name: Spring Dim Green
+    rgb: [209, 202, 156]
+  - code: "42"
+    name: Bronze Green
+    rgb: [122, 115, 73]
+  - code: "46"
+    name: Vivid Green
+    rgb: [94, 224, 138]
+  - code: "55"
+    name: Emerald Green
+    rgb: [96, 211, 136]
+  - code: "61"
+    name: Peacock Green
+    rgb: [102, 193, 186]
+  - code: "50"
+    name: Forest Green
+    rgb: [41, 118, 126]
+  - code: "123"
+    name: Fluorescent Yellow
+    rgb: [254, 254, 99]
+  - code: "35"
+    name: Lemon Yellow
+    rgb: [255, 231, 71]
+  - code: "37"
+    name: Pastel Yellow
+    rgb: [255, 240, 85]
+  - code: "26"
+    name: Pastel Peach
+    rgb: [255, 223, 172]
+  - code: "34"
+    name: Yellow
+    rgb: [255, 203, 68]
+  - code: "24"
+    name: Marigold
+    rgb: [254, 198, 103]
+  - code: "31"
+    name: Dark Yellow
+    rgb: [255, 192, 76]
+  - code: "100"
+    name: Walnut
+    rgb: [227, 162, 106]
+  - code: "131"
+    name: Skin White
+    rgb: [253, 216, 210]
+  - code: "28"
+    name: Fruit Pink
+    rgb: [255, 207, 197]
+  - code: "140"
+    name: Light Orange
+    rgb: [255, 175, 168]
+  - code: "22"
+    name: French Vermilion
+    rgb: [254, 125, 103]
+  - code: "122"
+    name: Fluorescent Orange
+    rgb: [255, 143, 95]
+  - code: "91"
+    name: Natural Oak
+    rgb: [181, 108, 102]
+  - code: "93"
+    name: Burnt Orange
+    rgb: [251, 146, 116]
+  - code: "103"
+    name: Potato Brown
+    rgb: [253, 162, 128]
+  - code: "CG5"
+    name: Cool Grey
+    rgb: [132, 129, 140]
+  - code: "GG5"
+    name: Green Grey
+    rgb: [123, 118, 122]
+  - code: "BG7"
+    name: Blue Grey
+    rgb: [67, 71, 80]
+  - code: "98"
+    name: Chestnut Brown
+    rgb: [123, 101, 103]
+  - code: "1"
+    name: Wine Red
+    rgb: [183, 104, 125]
+  - code: "3"
+    name: Rose Red
+    rgb: [255, 104, 123]
+  - code: "12"
+    name: Coral Red
+    rgb: [254, 78, 78]
+  - code: "15"
+    name: Geranium
+    rgb: [255, 58, 75]
