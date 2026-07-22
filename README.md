@@ -3,6 +3,7 @@
 Turn any photograph into a printable, configurable color-by-number pattern for artists who need exactly one Aoartix marker code in every unfilled square, oriented to match the source.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
+![Aligned 86 by 60 blank gray grid and black numbered marker-code reference page](docs/screenshots/paired_artwork_pages.png)
 <!-- screenshots:end -->
 
 ## From photo to 5,160 decisions
@@ -14,14 +15,16 @@ Every square is an independent, usable marker decision:
 - Configurable grid resolution through `-g COLUMNSxROWS` or `--grid COLUMNSxROWS`.
 - One printed marker code in every square, including codes such as `120` and `BG7`.
 - White worksheet cells with black grid lines and no pre-colored boxes.
+- Sharp ReportLab vector PDFs with square cells and measured Letter-page margins.
 - Perceptual matching against the supplied 48-color Aoartix marker set.
 - Selective shadow-detail expansion that keeps dark textured colors from collapsing into black.
 - Separate source and marker previews for judging the result before printing.
 
-The tool creates a one-page reference PDF and a two-page final-artwork PDF. The reference places the
-numbered grid beside a colored marker key. The artwork PDF uses the largest grid that fits within
-0.6-inch Letter margins: page one is a light-gray blank grid, and page two is the exactly aligned
-black numbered grid. Wide and square sources use landscape; tall sources use portrait.
+ReportLab creates a one-page reference PDF and a two-page final-artwork PDF as crisp vector artwork.
+The reference places the numbered grid beside a colored marker key. The artwork PDF uses the largest
+grid that fits within 0.6-inch Letter margins: page one is a light-gray blank grid, and page two is
+the exactly aligned black numbered grid. Wide and square sources use landscape; tall sources use
+portrait.
 
 Color the blank first artwork page while reading marker codes from the second page. The matching
 cell geometry keeps the final picture free of printed numbers.
@@ -67,6 +70,29 @@ Open `output/pdf/color_by_number_grid_only.pdf` and print both pages in its gene
 Use `output/pdf/color_by_number.pdf` for the colored marker key. Replace the input path with the
 photograph to convert.
 
+## Try a public-domain portrait
+
+These museum records provide downloadable public-domain images, so they are useful reproducible
+examples without adding a large source image to this repository. Attribution is not required for
+public-domain works, but keep the artist, title, and museum with shared results:
+
+- Diego Velazquez, *Juan de Pareja*, The Metropolitan Museum of Art:
+  [collection record](https://www.metmuseum.org/art/collection/search/437869) and
+  [full-resolution original](https://images.metmuseum.org/CRDImages/ep/original/DP-14286-001.jpg).
+  The Met marks the image Public Domain. Its dark skin, hair, clothing, and warm brown shadows test
+  whether the palette preserves dark detail instead of collapsing it into marker `120`.
+- Jean-Auguste-Dominique Ingres, *Madame Moitessier*, National Gallery of Art:
+  [public-domain collection record and download](https://www.nga.gov/artworks/32696-madame-moitessier).
+  The gallery marks the object's media free and in the public domain. Pale skin, black clothing,
+  flower colors, and the patterned maroon wall test light skin separation and saturated reds.
+- Vincent van Gogh, *Self-Portrait with a Straw Hat*, The Metropolitan Museum of Art:
+  [public-domain collection record and download](https://www.metmuseum.org/art/collection/search/436532).
+  The Met marks the image Public Domain. Alternating blue, yellow, orange, and green brushwork tests
+  how a limited marker palette handles rapid hue changes and visible texture.
+
+Download one image, save it locally, and pass its path to `-i`. Keep the museum attribution in any
+published comparison so other readers can reproduce the same test.
+
 ## One image, seven artifacts
 
 | Output | What it provides |
@@ -102,6 +128,10 @@ median flat-background color sampled from its reference-chart swatch.
 
 - [docs/INSTALL.md](docs/INSTALL.md): Python 3.12 requirements and dependency setup.
 - [docs/USAGE.md](docs/USAGE.md): fitting, sizing, custom palette, and output options.
+- [docs/CODE_ARCHITECTURE.md](docs/CODE_ARCHITECTURE.md): pipeline stages, module boundaries, and
+  data flow.
+- [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md): source, palette, test, and generated-output
+  locations.
 - [docs/VISION_PIPELINE.md](docs/VISION_PIPELINE.md): image-processing contract, metrics, and
   limitations.
 

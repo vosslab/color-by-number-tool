@@ -28,11 +28,19 @@
   representative output, visible palette limitations, and direct documentation routes.
 - Added a two-page full-grid Letter PDF: a light-gray blank grid for the final artwork followed by
   an exactly aligned black numbered reference grid, both maximized inside 0.6-inch margins.
+- Added a repository-wide documentation set covering architecture, file structure, file formats,
+  development, troubleshooting, frequently asked questions, the roadmap, related projects, news,
+  and release history.
+- Added a privacy-safe README proof image showing the aligned blank and numbered artwork pages.
+- Added three museum-hosted public-domain portrait suggestions to the README for reproducible tests
+  of dark-tone detail, skin and red separation, and rapid hue changes.
 
 ### Behavior or Interface Changes
 
 - Added `-g`/`--grid COLUMNSxROWS` for configurable landscape grid dimensions, with automatic
   dimension swapping for portrait output, and changed the default from 43 by 30 to 86 by 60.
+- Reworked the README, installation guide, and usage guide around the current ReportLab workflow,
+  and reduced `AGENTS.md` to concise pointers to the canonical repository rules.
 
 ### Decisions and Failures
 
@@ -46,6 +54,10 @@
 - Compared selective shadow and warm-tone treatments against the fixed baseline. The strong preset
   reduced black hair cells from 165 to 72, increased brown-family cells from 86 to 126, and reduced
   pale face cells from 64 to 31 while mean Delta E 76 rose from 14.427 to 15.424.
+- Kept personal test portraits out of the README and used an abstract rendering of the generated
+  PDF pages as the checked-in visual example.
+- Kept the file-format documentation together in one guide and omitted empty TODO and cookbook
+  documents because the roadmap and usage guide already own the supported material.
 
 ### Developer Tests and Notes
 
@@ -56,3 +68,8 @@
 - Ran `source source_me.sh && python3 -m pytest tests/`: 551 tests passed in 2.03 seconds.
 - After adding configurable grids and the aligned artwork pages, ran
   `source source_me.sh && python3 -m pytest tests/`: 559 tests passed in 2.04 seconds.
+- Verified the README quick start, checked the 1,920 by 1,200 documentation image visually, and
+  confirmed the new and refreshed Markdown files use ASCII text and resolve to existing local
+  targets.
+- After the complete documentation refresh, ran
+  `source source_me.sh && python3 -m pytest tests/`: 610 tests passed in 2.15 seconds.

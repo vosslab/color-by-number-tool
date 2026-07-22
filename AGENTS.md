@@ -1,9 +1,21 @@
-## Coding Style
-See Python coding style in docs/PYTHON_STYLE.md.
-See Markdown style in docs/MARKDOWN_STYLE.md.
-See repo style in docs/REPO_STYLE.md.
-When making edits, document them in docs/CHANGELOG.md.
+# Agent instructions
 
-## Python Environment
-AI agents (Codex/Claude) must run Python using `source source_me.sh && python3` (use Python 3.12 only).
-On this user's macOS (Homebrew Python 3.12), Python modules are installed to `/opt/homebrew/lib/python3.12/site-packages/`.
+when in doubt, do the next step before prompting
+
+## Required docs
+
+- `docs/REPO_STYLE.md`
+- `docs/PYTHON_STYLE.md`
+- `docs/PYTEST_STYLE.md`
+- `docs/MARKDOWN_STYLE.md`
+- `docs/CHANGELOG.md`
+
+## Commands
+
+- Run every Python command with `source source_me.sh && python3` using Python 3.12.
+- Python modules are installed under `/opt/homebrew/lib/python3.12/site-packages/`.
+- Run the full suite with `source source_me.sh && python3 -m pytest tests/`.
+
+## Git
+
+- Humans handle Git index and history operations; agents leave edits unstaged and uncommitted.

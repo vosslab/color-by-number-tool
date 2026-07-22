@@ -1,19 +1,38 @@
 # Usage
 
-## Create a worksheet
+Convert a still image into ReportLab Letter PDFs, marker and source previews, cell assignments, a
+marker legend, and color-error metrics. Every output grid cell contains either one marker code or,
+on the blank artwork page, no text at all.
 
-Run the converter with a photograph:
+## Quick start
+
+Run the included palette chart through the complete conversion path:
 
 ```bash
-source source_me.sh && python3 color_by_number.py -i portrait.jpg
+source source_me.sh && python3 color_by_number.py -i palettes/marker_image_set.jpg
 ```
 
-The default center crop fills all 86 by 60 landscape squares, rotated for portrait. To preserve the
-entire source image and add borders where needed, use:
+The command writes seven files under `output/pdf/`. Open `color_by_number_grid_only.pdf` for the
+blank and numbered artwork pages, and use `color_by_number.pdf` for the colored marker key.
+
+Replace the input path with a photograph. The default center crop fills all 86 by 60 landscape
+squares, rotated for portrait. To preserve the complete image and add borders where needed, use:
 
 ```bash
 source source_me.sh && python3 color_by_number.py -i portrait.jpg -f contain
 ```
+
+## CLI options
+
+| Option | Purpose |
+| --- | --- |
+| `-i`, `--input` | Select the required source image. |
+| `-o`, `--output` | Set the marker-key PDF path and companion filename stem. |
+| `-p`, `--palette` | Load another marker palette YAML file. |
+| `-f`, `--fit` | Choose center crop or contain with borders. |
+| `-g`, `--grid` | Set landscape columns by rows; portrait swaps them. |
+| `-e`, `--enhancement` | Choose `none`, `balanced`, or `strong` color treatment. |
+| `-L`, `-P` | Force landscape or portrait page orientation. |
 
 ## Choose page orientation
 
