@@ -8,36 +8,98 @@ Run the converter with a photograph:
 source source_me.sh && python3 color_by_number.py -i portrait.jpg
 ```
 
-The default center crop fills all 43 by 30 squares. To preserve the entire source image and
-add borders where needed, use:
+The default center crop fills all 86 by 60 landscape squares, rotated for portrait. To preserve the
+entire source image and add borders where needed, use:
 
 ```bash
 source source_me.sh && python3 color_by_number.py -i portrait.jpg -f contain
 ```
 
-## Print the reference page
+## Choose page orientation
 
-The primary PDF is one 11-inch by 8.5-inch landscape Letter page. It uses 0.65-inch outer margins,
-which are larger than 0.6 inches on every side. The 43 by 30 code grid sits on the left, while a
-two-column key on the right shows a colored swatch, code, and square count for every marker used.
+Page orientation follows the EXIF-corrected source dimensions by default:
 
-Every grid cell is a perfect square and remains unfilled. Use the PDF as a reference while coloring
-the corresponding row and column on a separate 43 by 30 sheet of graph paper. Only the side-key
-swatches contain color.
+- Wide and square images produce a landscape Letter page with 86 columns by 60 rows by default.
+- Tall images produce a portrait Letter page with 60 columns by 86 rows by default.
 
-Print in landscape orientation. Actual-size printing preserves the designed margins; fitting to the
-printer area is also safe because the PDF scales uniformly and keeps the grid cells square.
+Force either layout when composition matters more than source aspect ratio:
+
+```bash
+source source_me.sh && python3 color_by_number.py -i kimi.png -L
+source source_me.sh && python3 color_by_number.py -i kimi.png -P
+```
+
+The short and long flags are equivalent: `-L` or `--landscape`, and `-P` or `--portrait`.
+
+## Choose grid resolution
+
+Use `-g` or `--grid` with landscape columns by rows. Portrait output swaps the two dimensions:
+
+```bash
+source source_me.sh && python3 color_by_number.py -i kimi-face.png -g 86x60
+```
+
+The default is `86x60`. For example, `-g 43x30` restores the original lower-resolution grid with
+cells twice as wide and twice as tall. The first dimension must be at least as large as the second
+so automatic orientation always places the longer grid dimension along the page's longer edge.
+
+Changing from 43 by 30 to 86 by 60 increases the number of image samples from 1,290 to 5,160. It
+does not enlarge the grid's physical page footprint because both grids have the same aspect ratio;
+it divides the same area into smaller cells.
+
+## Choose color enhancement
+
+The default `strong` preset expands lightness differences only in locally changing dark colors and
+adds 15% chroma only to warm midtones and highlights. This keeps textured brown hair, wood, fabric,
+skin, and similar regions from collapsing into black or pale blocks without adding noise to flat
+backgrounds.
+
+Use the original nearest-color behavior for a baseline comparison:
+
+```bash
+source source_me.sh && python3 color_by_number.py -i kimi-face.png -e none
+```
+
+Use the gentler tested treatment when lower color error matters more than maximum hair detail:
+
+```bash
+source source_me.sh && python3 color_by_number.py -i kimi-face.png -e balanced
+```
+
+On `kimi-face.png`, `strong` reduced black assignments in the measured upper-hair region from 165
+to 72, increased brown-family assignments from 86 to 126, and reduced pale face assignments from
+64 to 31. Mean Delta E 76 increased from 14.427 to 15.424. The `balanced` preset reduced black hair
+assignments to 104 with a lower mean error of 14.910.
+
+## Print the artwork pages
+
+The generated `color_by_number_grid_only.pdf` contains two full Letter pages with identical grid
+positions and 0.6-inch minimum margins:
+
+1. Page one has light-gray grid lines and no codes. Color this page as the final artwork.
+2. Page two has black grid lines and one marker code in every cell. Use it as the reference.
+
+Print both at actual size in the generated orientation. The cells line up exactly because ReportLab
+draws both pages from the same point-based geometry. Fitting to the printer area also keeps cells
+square, but both pages must use the same print scaling.
+
+The separate `color_by_number.pdf` is the marker-key worksheet. It uses 0.65-inch outer margins and
+places a smaller numbered grid on the left beside a two-column colored key on the right.
+
+Every grid cell remains unfilled. Only the side-key swatches in the marker-key worksheet contain
+color.
 
 ## Output files
 
 | File | Purpose |
 | --- | --- |
 | `color_by_number.pdf` | Letter page with the white code grid and colored key on the right. |
+| `color_by_number_grid_only.pdf` | Blank gray grid and aligned black numbered grid on two pages. |
 | `color_by_number_marker_preview.png` | Filled preview of the selected marker colors. |
-| `color_by_number_source_preview.png` | Unquantized 43 by 30 source-color reference. |
+| `color_by_number_source_preview.png` | Unquantized, orientation-matched source-color reference. |
 | `color_by_number_assignments.csv` | Row, column, marker code, color name, and RGB per square. |
 | `color_by_number_legend.csv` | All marker colors and their assigned square counts. |
-| `color_by_number_summary.txt` | Inputs, grid invariants, fit mode, and color metrics. |
+| `color_by_number_summary.txt` | Inputs, grid invariants, fit mode, enhancement, and metrics. |
 
 ## Marker palette data
 

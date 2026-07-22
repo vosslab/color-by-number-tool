@@ -1,15 +1,16 @@
-"""Single-page landscape Letter worksheet and color-key PDF writing."""
+"""Single-page Letter worksheet and color-key PDF writing."""
 
 # Standard Library
+import dataclasses
 import math
 import pathlib
-import dataclasses
 
 # PIP3 modules
 import numpy
-import reportlab.pdfgen.canvas
-import reportlab.lib.pagesizes
 import reportlab.lib.colors
+import reportlab.lib.pagesizes
+import reportlab.pdfbase.pdfmetrics
+import reportlab.pdfgen.canvas
 
 # local repo modules
 import colorbynumber.constants
@@ -19,8 +20,12 @@ import colorbynumber.marker_color
 POINTS_PER_INCH = 72.0
 PAGE_MARGIN = 0.65 * POINTS_PER_INCH
 KEY_GAP = 0.25 * POINTS_PER_INCH
-KEY_WIDTH = 1.5 * POINTS_PER_INCH
+KEY_WIDTH = 1.7 * POINTS_PER_INCH
 KEY_COLUMNS = 2
+KEY_HEADER_HEIGHT = 14.0
+CODE_FONT_NAME = "Helvetica-Bold"
+MAX_CODE_FONT_SIZE = 5.4
+CODE_WIDTH_FRACTION = 0.78
 
 
 @dataclasses.dataclass(frozen=True)
@@ -29,6 +34,9 @@ class PageLayout:
 
 	page_width: float
 	page_height: float
+	page_orientation: str
+	columns: int
+	rows: int
 	margin: float
 	grid_x: float
 	grid_y: float
@@ -40,30 +48,49 @@ class PageLayout:
 
 
 #============================================
-def calculate_layout() -> PageLayout:
-	"""Calculate a landscape Letter layout with square cells and a side key.
+def calculate_layout(
+	page_orientation: str,
+	columns: int,
+	rows: int,
+) -> PageLayout:
+	"""Calculate a Letter layout with square cells and a side key.
+
+	Args:
+		page_orientation: Resolved landscape or portrait orientation.
+		columns: Number of grid columns.
+		rows: Number of grid rows.
 
 	Returns:
 		The physical page, grid, and key dimensions in PDF points.
+
+	Raises:
+		ValueError: The page orientation is not supported.
 	"""
-	page_width, page_height = reportlab.lib.pagesizes.landscape(
-		reportlab.lib.pagesizes.letter
-	)
+	if page_orientation == colorbynumber.constants.LANDSCAPE_ORIENTATION:
+		page_size = reportlab.lib.pagesizes.landscape(reportlab.lib.pagesizes.letter)
+	elif page_orientation == colorbynumber.constants.PORTRAIT_ORIENTATION:
+		page_size = reportlab.lib.pagesizes.portrait(reportlab.lib.pagesizes.letter)
+	else:
+		raise ValueError(f"Unsupported page orientation: {page_orientation}")
+	page_width, page_height = page_size
 	content_width = page_width - 2.0 * PAGE_MARGIN
 	content_height = page_height - 2.0 * PAGE_MARGIN
 	grid_available_width = content_width - KEY_GAP - KEY_WIDTH
 	cell_size = min(
-		grid_available_width / colorbynumber.constants.GRID_COLUMNS,
-		content_height / colorbynumber.constants.GRID_ROWS,
+		grid_available_width / columns,
+		content_height / rows,
 	)
-	grid_width = cell_size * colorbynumber.constants.GRID_COLUMNS
-	grid_height = cell_size * colorbynumber.constants.GRID_ROWS
+	grid_width = cell_size * columns
+	grid_height = cell_size * rows
 	grid_x = PAGE_MARGIN
 	grid_y = PAGE_MARGIN + (content_height - grid_height) / 2.0
 	key_x = grid_x + grid_width + KEY_GAP
 	layout = PageLayout(
 		page_width=page_width,
 		page_height=page_height,
+		page_orientation=page_orientation,
+		columns=columns,
+		rows=rows,
 		margin=PAGE_MARGIN,
 		grid_x=grid_x,
 		grid_y=grid_y,
@@ -77,6 +104,54 @@ def calculate_layout() -> PageLayout:
 
 
 #============================================
+def calculate_code_font_size(
+	layout: PageLayout,
+	palette: list[colorbynumber.marker_color.MarkerColor],
+) -> float:
+	"""Return one readable font size that fits every marker code.
+
+	Args:
+		layout: Computed page layout.
+		palette: Available marker colors.
+
+	Returns:
+		The largest permitted common font size that fits every code.
+	"""
+	maximum_width = max(
+		reportlab.pdfbase.pdfmetrics.stringWidth(
+			marker.code,
+			CODE_FONT_NAME,
+			MAX_CODE_FONT_SIZE,
+		)
+		for marker in palette
+	)
+	available_width = layout.cell_size * CODE_WIDTH_FRACTION
+	if maximum_width > available_width:
+		font_size = MAX_CODE_FONT_SIZE * available_width / maximum_width
+	else:
+		font_size = MAX_CODE_FONT_SIZE
+	return font_size
+
+
+#============================================
+def centered_text_baseline(y_center: float, font_name: str, font_size: float) -> float:
+	"""Return the baseline that centers a font's measured glyph box vertically.
+
+	Args:
+		y_center: Desired vertical center in PDF points.
+		font_name: Registered ReportLab font name.
+		font_size: Font size in points.
+
+	Returns:
+		The baseline position in PDF points.
+	"""
+	ascent = reportlab.pdfbase.pdfmetrics.getAscent(font_name) * font_size / 1000.0
+	descent = reportlab.pdfbase.pdfmetrics.getDescent(font_name) * font_size / 1000.0
+	baseline = y_center - (ascent + descent) / 2.0
+	return baseline
+
+
+#============================================
 def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None:
 	"""Draw the compact worksheet title and grid contract.
 
@@ -87,18 +162,38 @@ def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 	title_y = layout.page_height - layout.margin - 12.0
 	pdf.setFillColor(reportlab.lib.colors.black)
 	pdf.setFont("Helvetica-Bold", 11.0)
-	pdf.drawString(layout.grid_x, title_y, "43 x 30 COLOR BY NUMBER")
+	pdf.drawString(
+		layout.grid_x,
+		title_y,
+		f"{layout.columns} x {layout.rows} COLOR BY NUMBER",
+	)
 	pdf.setFont("Helvetica", 6.5)
 	pdf.drawString(
 		layout.grid_x,
 		title_y - 10.0,
 		"One marker code per square. Grid boxes are intentionally unfilled.",
 	)
-	pdf.setFont("Helvetica-Bold", 8.0)
+	header_y = title_y - 3.0
+	pdf.setFillColor(reportlab.lib.colors.black)
+	pdf.rect(
+		layout.key_x,
+		header_y,
+		layout.key_width,
+		KEY_HEADER_HEIGHT,
+		stroke=0,
+		fill=1,
+	)
+	pdf.setFillColor(reportlab.lib.colors.white)
+	pdf.setFont("Helvetica-Bold", 7.2)
+	key_title_baseline = centered_text_baseline(
+		header_y + KEY_HEADER_HEIGHT / 2.0,
+		"Helvetica-Bold",
+		7.2,
+	)
 	pdf.drawCentredString(
 		layout.key_x + layout.key_width / 2.0,
-		title_y,
-		"COLOR KEY",
+		key_title_baseline,
+		"MARKER KEY",
 	)
 
 
@@ -109,7 +204,7 @@ def draw_code_grid(
 	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 ) -> None:
-	"""Draw the white 43 by 30 grid and one black code per cell.
+	"""Draw the white grid and one black code per cell.
 
 	Args:
 		pdf: ReportLab canvas for the output page.
@@ -117,8 +212,8 @@ def draw_code_grid(
 		indices: Palette index for every grid square.
 		palette: Available marker colors.
 	"""
-	columns = colorbynumber.constants.GRID_COLUMNS
-	rows = colorbynumber.constants.GRID_ROWS
+	columns = layout.columns
+	rows = layout.rows
 	pdf.setFillColor(reportlab.lib.colors.white)
 	pdf.rect(
 		layout.grid_x,
@@ -129,7 +224,7 @@ def draw_code_grid(
 		fill=1,
 	)
 	pdf.setStrokeColor(reportlab.lib.colors.black)
-	pdf.setLineWidth(0.35)
+	pdf.setLineWidth(0.3)
 	for column in range(columns + 1):
 		x_position = layout.grid_x + column * layout.cell_size
 		pdf.line(x_position, layout.grid_y, x_position, layout.grid_y + layout.grid_height)
@@ -137,16 +232,26 @@ def draw_code_grid(
 		y_position = layout.grid_y + row * layout.cell_size
 		pdf.line(layout.grid_x, y_position, layout.grid_x + layout.grid_width, y_position)
 
-	font_size = min(5.2, layout.cell_size * 0.40)
+	pdf.setLineWidth(0.7)
+	pdf.rect(
+		layout.grid_x,
+		layout.grid_y,
+		layout.grid_width,
+		layout.grid_height,
+		stroke=1,
+		fill=0,
+	)
+
+	font_size = calculate_code_font_size(layout, palette)
 	pdf.setFillColor(reportlab.lib.colors.black)
-	pdf.setFont("Helvetica", font_size)
-	baseline_offset = font_size * 0.35
+	pdf.setFont(CODE_FONT_NAME, font_size)
 	for row in range(rows):
 		for column in range(columns):
 			marker = palette[int(indices[row, column])]
 			x_center = layout.grid_x + (column + 0.5) * layout.cell_size
 			y_center = layout.grid_y + layout.grid_height - (row + 0.5) * layout.cell_size
-			pdf.drawCentredString(x_center, y_center - baseline_offset, marker.code)
+			baseline = centered_text_baseline(y_center, CODE_FONT_NAME, font_size)
+			pdf.drawCentredString(x_center, baseline, marker.code)
 
 
 #============================================
@@ -171,24 +276,28 @@ def draw_color_key(
 		if count > 0
 	]
 	rows_per_column = math.ceil(len(used_entries) / KEY_COLUMNS)
-	item_height = min(18.0, layout.grid_height / rows_per_column)
+	item_height = min(22.0, layout.grid_height / rows_per_column)
 	column_width = layout.key_width / KEY_COLUMNS
-	swatch_size = min(10.0, item_height - 3.0)
-	pdf.setFont("Helvetica", 5.4)
+	swatch_size = min(11.0, item_height - 4.0)
 	for index, (marker, count) in enumerate(used_entries):
 		column = index // rows_per_column
 		row = index % rows_per_column
 		x_position = layout.key_x + column * column_width
 		y_top = layout.grid_y + layout.grid_height - row * item_height
-		swatch_y = y_top - swatch_size
+		y_center = y_top - item_height / 2.0
+		swatch_y = y_center - swatch_size / 2.0
 		red, green, blue = marker.rgb
 		pdf.setFillColorRGB(red / 255.0, green / 255.0, blue / 255.0)
 		pdf.setStrokeColor(reportlab.lib.colors.black)
 		pdf.setLineWidth(0.3)
 		pdf.rect(x_position, swatch_y, swatch_size, swatch_size, stroke=1, fill=1)
 		pdf.setFillColor(reportlab.lib.colors.black)
-		label = f"{marker.code} x{count}"
-		pdf.drawString(x_position + swatch_size + 2.5, swatch_y + 2.0, label)
+		text_x = x_position + swatch_size + 2.5
+		pdf.setFont("Helvetica-Bold", 5.4)
+		pdf.drawString(text_x, y_center + 0.5, f"{marker.code}  x{count}")
+		pdf.setFont("Helvetica", 4.3)
+		pdf.setFillColorRGB(0.25, 0.25, 0.25)
+		pdf.drawString(text_x, y_center - 5.2, marker.name)
 
 
 #============================================
@@ -205,7 +314,10 @@ def draw_footer(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 	pdf.drawString(
 		layout.grid_x,
 		footer_y,
-		"Print landscape at actual size. Key colors use chart RGB and approximate physical ink.",
+		(
+			f"Print {layout.page_orientation} at actual size. "
+			"Key colors use chart RGB and approximate physical ink."
+		),
 	)
 
 
@@ -213,6 +325,7 @@ def draw_footer(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 def write_pdf(
 	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
+	page_orientation: str,
 	output_path: pathlib.Path,
 ) -> None:
 	"""Write the complete single-page Letter PDF.
@@ -220,11 +333,17 @@ def write_pdf(
 	Args:
 		indices: Palette index for every grid square.
 		palette: Available marker colors.
+		page_orientation: Resolved landscape or portrait orientation.
 		output_path: Destination PDF path.
 	"""
-	layout = calculate_layout()
+	rows, columns = indices.shape
+	layout = calculate_layout(page_orientation, columns, rows)
 	page_size = (layout.page_width, layout.page_height)
 	pdf = reportlab.pdfgen.canvas.Canvas(str(output_path), pagesize=page_size)
+	pdf.setTitle(f"{columns} x {rows} color-by-number worksheet")
+	pdf.setAuthor("color-by-number-tool")
+	pdf.setSubject("Printable marker-code grid with an Aoartix marker key")
+	pdf.setCreator("color-by-number-tool")
 	draw_header(pdf, layout)
 	draw_code_grid(pdf, layout, indices, palette)
 	draw_color_key(pdf, layout, indices, palette)

@@ -8,10 +8,6 @@ import numpy
 import PIL.Image
 import PIL.ImageOps
 
-# local repo modules
-import colorbynumber.constants
-
-
 #============================================
 def load_rgb_image(image_path: pathlib.Path) -> PIL.Image.Image:
 	"""Load an image, apply EXIF orientation, and flatten transparency to white.
@@ -40,17 +36,24 @@ def load_rgb_image(image_path: pathlib.Path) -> PIL.Image.Image:
 
 
 #============================================
-def sample_image_grid(image: PIL.Image.Image, fit_mode: str) -> numpy.ndarray:
+def sample_image_grid(
+	image: PIL.Image.Image,
+	fit_mode: str,
+	columns: int,
+	rows: int,
+) -> numpy.ndarray:
 	"""Resample an image into exactly one RGB value per output square.
 
 	Args:
 		image: Source RGB image.
 		fit_mode: Either crop or contain.
+		columns: Number of grid columns.
+		rows: Number of grid rows.
 
 	Returns:
-		A GRID_ROWS by GRID_COLUMNS RGB array.
+		A rows by columns RGB array.
 	"""
-	target_size = (colorbynumber.constants.GRID_COLUMNS, colorbynumber.constants.GRID_ROWS)
+	target_size = (columns, rows)
 	if fit_mode == "crop":
 		grid_image = PIL.ImageOps.fit(
 			image,

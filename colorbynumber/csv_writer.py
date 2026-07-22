@@ -8,7 +8,6 @@ import pathlib
 import numpy
 
 # local repo modules
-import colorbynumber.constants
 import colorbynumber.marker_color
 
 
@@ -25,8 +24,7 @@ def write_assignments_csv(
 		palette: Available marker colors.
 		output_path: Destination CSV path.
 	"""
-	columns = colorbynumber.constants.GRID_COLUMNS
-	rows = colorbynumber.constants.GRID_ROWS
+	rows, columns = indices.shape
 	with output_path.open("w", encoding="utf-8", newline="") as handle:
 		writer = csv.writer(handle)
 		writer.writerow(("row", "column", "code", "color_name", "red", "green", "blue"))

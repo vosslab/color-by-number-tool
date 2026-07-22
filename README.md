@@ -1,27 +1,30 @@
 # Color-by-number tool
 
-Turn any photograph into a printable 43 by 30 color-by-number grid for artists who need exactly one Aoartix marker code in every unfilled square.
+Turn any photograph into a printable, configurable color-by-number pattern for artists who need exactly one Aoartix marker code in every unfilled square, oriented to match the source.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 <!-- screenshots:end -->
 
-## From photo to 1,290 decisions
+## From photo to 5,160 decisions
 
 The tool reduces a photograph to a strict physical worksheet instead of a blended digital effect.
 Every square is an independent, usable marker decision:
 
-- 43 columns by 30 rows of equal-width and equal-height squares.
+- 86 columns by 60 rows in landscape by default, or 60 columns by 86 rows in portrait.
+- Configurable grid resolution through `-g COLUMNSxROWS` or `--grid COLUMNSxROWS`.
 - One printed marker code in every square, including codes such as `120` and `BG7`.
 - White worksheet cells with black grid lines and no pre-colored boxes.
 - Perceptual matching against the supplied 48-color Aoartix marker set.
+- Selective shadow-detail expansion that keeps dark textured colors from collapsing into black.
 - Separate source and marker previews for judging the result before printing.
 
-The primary output is one landscape 8.5 by 11-inch PDF with 0.65-inch margins. The numbered grid
-sits on the left, and a two-column key of the used marker colors sits on the right. Grid cells stay
-white; only the separate key swatches use color.
+The tool creates a one-page reference PDF and a two-page final-artwork PDF. The reference places the
+numbered grid beside a colored marker key. The artwork PDF uses the largest grid that fits within
+0.6-inch Letter margins: page one is a light-gray blank grid, and page two is the exactly aligned
+black numbered grid. Wide and square sources use landscape; tall sources use portrait.
 
-Use the PDF as a reference map while coloring the matching rows and columns on a separate 43 by 30
-sheet of graph paper.
+Color the blank first artwork page while reading marker codes from the second page. The matching
+cell geometry keeps the final picture free of printed numbers.
 
 ## Before the first print
 
@@ -29,8 +32,14 @@ The built-in RGB values come from the supplied product chart, not physical ink s
 ink appearance changes with paper, lighting, and camera capture. The chart palette is a useful
 starting point; measured swatches on the final paper provide the closest physical match.
 
-The fixed 43 by 30 resolution also removes small facial details. Use the generated source and
-marker previews to choose the crop before printing the worksheet.
+The default 86 by 60 resolution retains more facial detail than the original 43 by 30 grid, but
+the marker palette still limits color detail. Use the generated source and marker previews to judge
+the crop and resolution before printing the worksheet.
+
+The default strong enhancement changes only two measured color groups: locally changing dark
+colors receive a shadow curve, and warm midtones receive a modest chroma boost. Flat backgrounds
+and neutral black regions keep ordinary nearest-color matching. Use `-e none` for the unmodified
+baseline or `-e balanced` for a gentler treatment.
 
 ## Quick start
 
@@ -41,11 +50,12 @@ Use Python 3.12 and install the packages in `pip_requirements.txt` as described 
 source source_me.sh && python3 color_by_number.py -i palettes/marker_image_set.jpg
 ```
 
-The command creates the worksheet and five companion artifacts under `output/`:
+The command creates seven artifacts under `output/`:
 
 ```text
-Created a 43 x 30 color-by-number diagram:
+Created 86 x 60 landscape color-by-number diagram:
   diagram: output/pdf/color_by_number.pdf
+  artwork pages: output/pdf/color_by_number_grid_only.pdf
   marker preview: output/pdf/color_by_number_marker_preview.png
   source preview: output/pdf/color_by_number_source_preview.png
   assignments: output/pdf/color_by_number_assignments.csv
@@ -53,23 +63,34 @@ Created a 43 x 30 color-by-number diagram:
   summary: output/pdf/color_by_number_summary.txt
 ```
 
-Open `output/pdf/color_by_number.pdf` and print in landscape orientation. Replace the input path
-with the photograph to convert.
+Open `output/pdf/color_by_number_grid_only.pdf` and print both pages in its generated orientation.
+Use `output/pdf/color_by_number.pdf` for the colored marker key. Replace the input path with the
+photograph to convert.
 
-## One image, six artifacts
+## One image, seven artifacts
 
 | Output | What it provides |
 | --- | --- |
 | `color_by_number.pdf` | One Letter page with the white code grid and a colored side key. |
+| `color_by_number_grid_only.pdf` | Aligned blank-gray and black-numbered full-grid Letter pages. |
 | `color_by_number_marker_preview.png` | The photograph reconstructed with marker colors. |
-| `color_by_number_source_preview.png` | The unquantized 43 by 30 source-color reference. |
+| `color_by_number_source_preview.png` | The unquantized, orientation-matched source-color reference. |
 | `color_by_number_assignments.csv` | The code, name, and RGB choice for every grid position. |
 | `color_by_number_legend.csv` | Every palette entry and its assigned square count. |
-| `color_by_number_summary.txt` | Grid invariants, fit mode, and Delta E 76 error metrics. |
+| `color_by_number_summary.txt` | Grid invariants, fit mode, enhancement preset, and Delta E metrics. |
 
 Use `-o output/pdf/family_portrait.pdf` to choose the worksheet filename. All companion files inherit
 the `family_portrait` stem. Use `-f contain` to preserve the complete source image instead of center
 cropping it.
+
+Automatic page orientation follows the EXIF-corrected source dimensions. Use `-L` or `--landscape`
+to force landscape or `-P` or `--portrait` to force portrait. The default `-g 86x60` value describes
+landscape columns by rows; portrait swaps it to 60 by 86. Square sources use landscape unless
+overridden. Use another resolution, such as `-g 43x30`, for larger physical squares.
+
+Choose `-e none`, `-e balanced`, or `-e strong`. The strong default was selected from controlled
+comparisons on `kimi-face.png`: it exposes the most hair structure and restores warm skin
+separation, while balanced remains closer to the source under Delta E 76.
 
 ## Aoartix marker palette
 
