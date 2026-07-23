@@ -11,6 +11,11 @@ install a separate console command.
 - NumPy and Pillow for image sampling, color calculations, and PNG previews.
 - PyYAML for marker palette loading.
 - ReportLab for vector Letter PDFs with exact square-cell geometry.
+- Shapely for bounded polygon construction, clipping, topology, and boolean validation in the
+  experimental Voronoi work. An independent analytical half-plane oracle checks its results.
+
+SciPy and scikit-image are not declared runtime dependencies and are not installed by the runtime
+manifest.
 
 ## Install steps
 

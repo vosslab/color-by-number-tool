@@ -1,0 +1,113 @@
+"""Prototype-only polygon preview and comparison PNG writing."""
+
+# Standard Library
+import pathlib
+
+# PIP3 modules
+import numpy
+import PIL.Image
+import PIL.ImageDraw
+
+# local repo modules
+import colorbynumber.voronoi_geometry
+
+
+COMPARISON_HEADER_HEIGHT = 28
+
+
+#============================================
+def _pixel_vertex(
+	partition: colorbynumber.voronoi_geometry.Partition,
+	vertex: tuple[float, float],
+	width: int,
+	height: int,
+) -> tuple[float, float]:
+	"""Map one domain vertex to top-left raster coordinates."""
+	x = vertex[0] * width / partition.domain.width
+	y = (partition.domain.height - vertex[1]) * height / partition.domain.height
+	point = (x, y)
+	return point
+
+
+#============================================
+def draw_partition_lines(
+	image: PIL.Image.Image,
+	partition: colorbynumber.voronoi_geometry.Partition,
+	line_color: tuple[int, int, int] = (42, 42, 42),
+	line_width: int = 1,
+) -> None:
+	"""Draw stable ordered polygon edges onto an RGB preview image."""
+	if line_width <= 0:
+		raise ValueError("Preview line width must be greater than zero")
+	draw = PIL.ImageDraw.Draw(image)
+	for cell in partition.cells:
+		points = [
+			_pixel_vertex(partition, vertex, image.width, image.height)
+			for vertex in cell.vertices
+		]
+		points.append(points[0])
+		draw.line(points, fill=line_color, width=line_width, joint="curve")
+	# Domain maxima map to the outside edge of the raster, so redraw the
+	# complete partition border on the last in-bounds pixel coordinates.
+	border = (0, 0, image.width - 1, image.height - 1)
+	draw.rectangle(border, outline=line_color, width=line_width)
+
+
+#============================================
+def write_polygon_preview(
+	reconstruction_rgb: numpy.ndarray,
+	partition: colorbynumber.voronoi_geometry.Partition,
+	output_path: pathlib.Path,
+) -> None:
+	"""Write one palette-colored polygon preview with visible cell boundaries."""
+	image = PIL.Image.fromarray(reconstruction_rgb.astype(numpy.uint8), mode="RGB")
+	draw_partition_lines(image, partition)
+	output_path.parent.mkdir(parents=True, exist_ok=True)
+	image.save(output_path)
+
+
+#============================================
+def _labeled_panel(image: PIL.Image.Image, label: str) -> PIL.Image.Image:
+	"""Place a compact ASCII label above one comparison panel."""
+	panel = PIL.Image.new(
+		"RGB",
+		(image.width, image.height + COMPARISON_HEADER_HEIGHT),
+		(246, 246, 246),
+	)
+	panel.paste(image, (0, COMPARISON_HEADER_HEIGHT))
+	draw = PIL.ImageDraw.Draw(panel)
+	draw.text((8, 7), label, fill=(24, 24, 24))
+	return panel
+
+
+#============================================
+def write_comparison(
+	source_rgb: numpy.ndarray,
+	square_rgb: numpy.ndarray,
+	voronoi_rgb: numpy.ndarray,
+	partition: colorbynumber.voronoi_geometry.Partition,
+	output_path: pathlib.Path,
+) -> None:
+	"""Write equal-scale source, square-control, and Voronoi reference panels."""
+	if source_rgb.shape != square_rgb.shape or source_rgb.shape != voronoi_rgb.shape:
+		raise ValueError("Comparison rasters must have matching shapes")
+	source_image = PIL.Image.fromarray(source_rgb.astype(numpy.uint8), mode="RGB")
+	square_image = PIL.Image.fromarray(square_rgb.astype(numpy.uint8), mode="RGB")
+	voronoi_image = PIL.Image.fromarray(voronoi_rgb.astype(numpy.uint8), mode="RGB")
+	draw_partition_lines(voronoi_image, partition)
+	panels = (
+		_labeled_panel(source_image, "Fitted source"),
+		_labeled_panel(square_image, "Square control"),
+		_labeled_panel(voronoi_image, "Voronoi prototype"),
+	)
+	comparison = PIL.Image.new(
+		"RGB",
+		(sum(panel.width for panel in panels), panels[0].height),
+		(255, 255, 255),
+	)
+	x_offset = 0
+	for panel in panels:
+		comparison.paste(panel, (x_offset, 0))
+		x_offset += panel.width
+	output_path.parent.mkdir(parents=True, exist_ok=True)
+	comparison.save(output_path)

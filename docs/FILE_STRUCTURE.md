@@ -5,7 +5,7 @@
 | Path | Purpose |
 | --- | --- |
 | [../color_by_number.py](../color_by_number.py) | Executable command shim for the package CLI. |
-| [../colorbynumber/](../colorbynumber/) | Runtime image, matching, layout, and output modules. |
+| [../colorbynumber/](../colorbynumber/) | Default square pipeline and dedicated optional Voronoi polygon pipeline. |
 | [../palettes/](../palettes/) | Shipped marker palette data and its source chart. |
 | [../tests/](../tests/) | Functional tests and repository-wide policy checks. |
 | Current directory | User, design, style, and maintenance documentation. |
@@ -40,8 +40,31 @@ The [../colorbynumber/](../colorbynumber/) package is divided by responsibility:
   [../colorbynumber/csv_writer.py](../colorbynumber/csv_writer.py), and
   [../colorbynumber/summary_writer.py](../colorbynumber/summary_writer.py) create companion artifacts.
 - [../colorbynumber/constants.py](../colorbynumber/constants.py) and
-  [../colorbynumber/repo_paths.py](../colorbynumber/repo_paths.py) provide shared configuration and
-  repository data paths.
+  [../colorbynumber/repo_paths.py](../colorbynumber/repo_paths.py) provide low-level configuration
+  and repository data paths.
+- [../colorbynumber/voronoi_geometry.py](../colorbynumber/voronoi_geometry.py) provides the durable
+	geometry, raw grid, uniform, stratified-jitter and owned-bin hard-core generators,
+	one bounded-centroid point-relaxation step, construction, and validation layer.
+- [../colorbynumber/voronoi_metrics.py](../colorbynumber/voronoi_metrics.py) provides separate
+  deterministic quality metrics and five-phase single-run timing metadata.
+- [../colorbynumber/voronoi_experiment.py](../colorbynumber/voronoi_experiment.py) provides canonical
+  generation timing, configuration digests, and diagnostic artifact writers.
+- [../colorbynumber/voronoi_prototype.py](../colorbynumber/voronoi_prototype.py) owns reusable
+  polygon sampling and matching operations: hard-core accepted uniform draws, two bounded Lloyd
+  rounds, settled partition construction, pixel-center averaging, shared-edge strong matching, and
+  raster reconstruction.
+- [../colorbynumber/voronoi_pipeline.py](../colorbynumber/voronoi_pipeline.py) owns the optional
+  end-to-end Voronoi pathway selected by `--layout voronoi`: input loading, resolved dimensions,
+  internal replay seed, polygon generation, matching, and companion-output coordination.
+- [../colorbynumber/voronoi_preview_writer.py](../colorbynumber/voronoi_preview_writer.py) and
+  [../colorbynumber/voronoi_pdf_writer.py](../colorbynumber/voronoi_pdf_writer.py) render ordered
+  polygon assignments as PNG previews and three-page printable PDFs without adapting square
+  writers.
+- [../colorbynumber/voronoi_csv_writer.py](../colorbynumber/voronoi_csv_writer.py) writes stable
+  site-ordered polygon assignments and palette polygon counts as CSV companion artifacts.
+- [../colorbynumber/voronoi_summary_writer.py](../colorbynumber/voronoi_summary_writer.py) writes
+  the resolved Voronoi run settings, seed, matching errors, and geometry diagnostics as a text
+  companion artifact.
 
 ## Palette data
 
@@ -55,12 +78,20 @@ in [USAGE.md](USAGE.md); `name` and `source` remain descriptive metadata.
 
 ## Generated artifacts
 
-The CLI creates `output/pdf/` by default. A chosen PDF stem also names the two previews, two CSV
-files, text summary, and two-page grid-only PDF. These generated paths are ignored by
+The default square CLI creates `output/pdf/`. A chosen PDF stem names its previews, CSV files,
+text summary, and grid-only PDF. The optional Voronoi pathway uses the same output-directory and
+stem convention for its polygon PDF, previews, CSV files, and text summary; its PDF and preview
+contents are owned by Voronoi writers. These generated paths are ignored by
 [../.gitignore](../.gitignore) through the `output*/` rule.
 
 Stable smoke-test products belong under `output_smoke/`, which the same `output*/` rule ignores.
 Temporary render checks remain workspace-only and are removed after visual verification.
+
+Maintainer geometry experiments write JSON evaluations and SVG controls under the ignored
+`output/voronoi_experiment/` directory. Prototype evidence and production preview checks also use
+ignored `output*/` directories. Geometry and quality records are deterministic for a fixed
+configuration; single-run timing metadata may vary. These artifacts support Voronoi maintenance and
+do not change the square command's output formats.
 
 Generated filenames and their contents are listed in [USAGE.md](USAGE.md).
 
@@ -71,6 +102,8 @@ Generated filenames and their contents are listed in [USAGE.md](USAGE.md).
 - [FILE_FORMATS.md](FILE_FORMATS.md) specifies accepted image and palette inputs plus generated
   PDF, PNG, CSV, and text outputs.
 - [VISION_PIPELINE.md](VISION_PIPELINE.md) records the image-processing and print-geometry contracts.
+- [GEOMETRY_MODEL.md](GEOMETRY_MODEL.md) defines the Voronoi coordinate, tolerance,
+  degeneracy, and validation contracts; the analytical square cells are comparison controls.
 - [CODE_ARCHITECTURE.md](CODE_ARCHITECTURE.md) describes runtime components and data flow.
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) diagnoses setup, input, output, printing, and color issues.
 - [FAQ.md](FAQ.md) answers common workflow and output questions.
@@ -89,10 +122,16 @@ Generated filenames and their contents are listed in [USAGE.md](USAGE.md).
 
 ## Where to add work
 
-- Add runtime behavior as one focused module under [../colorbynumber/](../colorbynumber/), then wire
-  it through [../colorbynumber/cli.py](../colorbynumber/cli.py).
-- Add behavior tests to [../tests/test_color_by_number.py](../tests/test_color_by_number.py); add a
-  dedicated test module when a new source module needs substantial independent coverage.
+- Add production square behavior as one focused module under
+  [../colorbynumber/](../colorbynumber/), then wire it through the current square coordinator in
+  [../colorbynumber/cli.py](../colorbynumber/cli.py).
+- Add square behavior through the current square coordinator in
+  [../colorbynumber/cli.py](../colorbynumber/cli.py), preserving the square arrays and writers.
+- Add Voronoi behavior through [../colorbynumber/voronoi_pipeline.py](../colorbynumber/voronoi_pipeline.py)
+  and its dedicated polygon modules, preserving the ordered polygon contract and separate writers.
+- Add square behavior tests to [../tests/test_color_by_number.py](../tests/test_color_by_number.py).
+  Keep Voronoi behavior and writer tests in dedicated `test_voronoi_*.py` modules under
+  [../tests/](../tests/).
 - Add marker sets and their intentional source images under [../palettes/](../palettes/).
 - Add user and design references alongside [USAGE.md](USAGE.md) with uppercase underscore filenames.
 - Add maintainer-only automation under [../devel/](../devel/) and document it in

@@ -1,4 +1,4 @@
-"""Command-line parsing and pipeline orchestration."""
+"""Command-line parsing and dispatch for square and Voronoi output pipelines."""
 
 # Standard Library
 import argparse
@@ -16,6 +16,7 @@ import colorbynumber.pdf_writer
 import colorbynumber.preview_writer
 import colorbynumber.repo_paths
 import colorbynumber.summary_writer
+import colorbynumber.voronoi_pipeline
 
 
 #============================================
@@ -47,6 +48,13 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"-f", "--fit", dest="fit_mode", choices=("crop", "contain"), default="crop",
 		help="Fit the image by center cropping or adding a border (default: crop)",
+	)
+	parser.add_argument(
+		"--layout", choices=("square", "voronoi"), default="square",
+		help=(
+			"Output layout: square uses the existing default; voronoi uses organic polygons "
+			"(default: square)"
+		),
 	)
 	parser.add_argument(
 		"-g", "--grid", dest="grid_size", type=colorbynumber.orientation.parse_grid_size,
@@ -117,7 +125,7 @@ def build_output_paths(output_file: pathlib.Path) -> dict[str, pathlib.Path]:
 def generate_outputs(
 	args: argparse.Namespace,
 ) -> tuple[dict[str, pathlib.Path], str, tuple[int, int]]:
-	"""Run the complete image-to-diagram pipeline.
+	"""Run the unchanged square image-to-diagram pipeline.
 
 	Args:
 		args: Parsed command-line arguments.
@@ -182,12 +190,24 @@ def generate_outputs(
 
 #============================================
 def main() -> None:
-	"""Generate the diagram and report its output paths."""
+	"""Generate the selected diagram layout and report its output paths."""
 	args = parse_args()
-	paths, page_orientation, dimensions = generate_outputs(args)
+	if args.layout == "square":
+		paths, page_orientation, dimensions = generate_outputs(args)
+		internal_seed = None
+	elif args.layout == "voronoi":
+		result = colorbynumber.voronoi_pipeline.generate_outputs(args)
+		paths = result.paths
+		page_orientation = result.page_orientation
+		dimensions = result.dimensions
+		internal_seed = result.seed
+	else:
+		raise ValueError(f"Unsupported layout: {args.layout}")
 	columns, rows = dimensions
 	print(
-		f"Created {columns} x {rows} {page_orientation} color-by-number diagram:"
+		f"Created {columns} x {rows} {page_orientation} {args.layout} color-by-number diagram:"
 	)
 	for label, path in paths.items():
 		print(f"  {label}: {path}")
+	if internal_seed is not None:
+		print(f"  internal seed: {internal_seed}")

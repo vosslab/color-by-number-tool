@@ -2,3 +2,4 @@ numpy  # Array operations and perceptual color matching
 pillow  # Image loading, resizing, and PNG output
 pyyaml  # Marker palette data loading
 reportlab  # Fixed-size printable PDF generation
+shapely  # Bounded Voronoi construction and topology validation

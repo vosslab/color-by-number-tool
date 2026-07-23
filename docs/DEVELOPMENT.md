@@ -17,6 +17,8 @@ commands for contributors changing the converter or its documentation.
 - Put one responsibility in each module under [../colorbynumber/](../colorbynumber/).
 - Keep palette data under [../palettes/](../palettes/) rather than embedding marker colors in code.
 - Add behavioral tests to [../tests/test_color_by_number.py](../tests/test_color_by_number.py).
+- Keep reusable experimental geometry, metric, and artifact logic under
+  [../colorbynumber/](../colorbynumber/).
 - Update [CHANGELOG.md](CHANGELOG.md) whenever repository files change.
 
 See [CODE_ARCHITECTURE.md](CODE_ARCHITECTURE.md) and [FILE_STRUCTURE.md](FILE_STRUCTURE.md) for the

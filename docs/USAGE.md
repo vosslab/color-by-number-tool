@@ -1,8 +1,8 @@
 # Usage
 
-Convert a still image into ReportLab Letter PDFs, marker and source previews, cell assignments, a
-marker legend, and color-error metrics. Every output grid cell contains either one marker code or,
-on the blank artwork page, no text at all.
+Convert a still image into ReportLab Letter PDFs, marker and source previews, assignments, a marker
+legend, and color-error metrics. The default square layout uses grid cells; the optional Voronoi
+layout uses organically spaced polygons with the same grid-derived count and aspect ratio.
 
 ## Quick start
 
@@ -30,6 +30,7 @@ source source_me.sh && python3 color_by_number.py -i portrait.jpg -f contain
 | `-o`, `--output` | Set the marker-key PDF path and companion filename stem. |
 | `-p`, `--palette` | Load another marker palette YAML file. |
 | `-f`, `--fit` | Choose center crop or contain with borders. |
+| `--layout` | Choose `square` (default) or `voronoi` polygons. |
 | `-g`, `--grid` | Set landscape columns by rows; portrait swaps them. |
 | `-e`, `--enhancement` | Choose `none`, `balanced`, or `strong` color treatment. |
 | `-L`, `-P` | Force landscape or portrait page orientation. |
@@ -65,6 +66,26 @@ so automatic orientation always places the longer grid dimension along the page'
 Changing from 43 by 30 to 86 by 60 increases the number of image samples from 1,290 to 5,160. It
 does not enlarge the grid's physical page footprint because both grids have the same aspect ratio;
 it divides the same area into smaller cells.
+
+## Choose an organic layout
+
+The default `square` layout keeps the existing square-cell workflow. Use `--layout voronoi` to make
+the same count of organic, bounded polygons instead. `-g` still supplies landscape columns by rows:
+it sets the polygon count and worksheet aspect ratio, not polygon rows and columns.
+
+```bash
+source source_me.sh && python3 color_by_number.py -i kimi-face.png --layout voronoi -g 43x30
+```
+
+Voronoi placement is random for each run. The program generates its own seed rather than exposing a
+seed option, then records that seed in the Voronoi summary for maintainer replay. The selected
+distribution spaces accepted points apart and applies two bounded relaxation rounds before drawing
+the clipped polygons. It samples the source over each polygon area and applies the chosen `-e` color
+enhancement to neighboring polygon assignments.
+
+`-f crop` and `-f contain`, `-L` and `-P`, `-g`, `-p`, and `-e` work with both layouts. Portrait
+output still swaps the configured landscape dimensions before the polygon count and page geometry
+are resolved.
 
 ## Choose color enhancement
 
@@ -108,6 +129,11 @@ places a smaller numbered grid on the left beside a two-column colored key on th
 Every grid cell remains unfilled. Only the side-key swatches in the marker-key worksheet contain
 color.
 
+For Voronoi output, `<stem>.pdf` contains three aligned Letter pages with the same bounded polygons:
+a blank light-gray artwork page, a black numbered reference page, and a filled palette reference
+page. Numbered labels are centered at each polygon's area centroid. Print all three at the same scale
+when using the reference pages with the blank artwork.
+
 ## Output files
 
 | File | Purpose |
@@ -119,6 +145,20 @@ color.
 | `color_by_number_assignments.csv` | Row, column, marker code, color name, and RGB per square. |
 | `color_by_number_legend.csv` | All marker colors and their assigned square counts. |
 | `color_by_number_summary.txt` | Inputs, grid invariants, fit mode, enhancement, and metrics. |
+
+## Voronoi output files
+
+With `--layout voronoi`, the requested `<stem>.pdf` supplies the dedicated polygon worksheet. Its
+companions share the same stem:
+
+| File | Purpose |
+| --- | --- |
+| `color_by_number.pdf` | Three aligned Letter pages: blank artwork, numbered reference, and filled palette reference. |
+| `color_by_number_polygon_preview.png` | Palette-colored polygon preview with visible boundaries. |
+| `color_by_number_source_preview.png` | Fitted source-color reference at the polygon sampling resolution. |
+| `color_by_number_polygon_assignments.csv` | One stable site-ordered polygon assignment, including sampled source RGB and Delta E 76. |
+| `color_by_number_legend.csv` | Every palette color and its assigned polygon count. |
+| `color_by_number_summary.txt` | Resolved layout, generated seed, point-spacing policy, matching metrics, and label diagnostics. |
 
 ## Marker palette data
 
