@@ -31,6 +31,8 @@ source source_me.sh && python3 color_by_number.py -i portrait.jpg -f contain
 | `-p`, `--palette` | Load another marker palette YAML file. |
 | `-f`, `--fit` | Choose center crop or contain with borders. |
 | `--layout` | Choose `square` (default) or `voronoi` polygons. |
+| `-m`, `--merge-regions` | Merge edge-adjacent shapes with the same assigned palette entry. |
+| `-M`, `--no-merge-regions` | Keep every assigned shape separate (the default). |
 | `-g`, `--grid` | Set landscape columns by rows; portrait swaps them. |
 | `-e`, `--enhancement` | Choose `none`, `balanced`, or `strong` color treatment. |
 | `-L`, `-P` | Force landscape or portrait page orientation. |
@@ -62,6 +64,16 @@ source source_me.sh && python3 color_by_number.py -i kimi-face.png -g 86x60
 The default is `86x60`. For example, `-g 43x30` restores the original lower-resolution grid with
 cells twice as wide and twice as tall. The first dimension must be at least as large as the second
 so automatic orientation always places the longer grid dimension along the page's longer edge.
+
+## Merge same-color regions
+
+After choosing either layout, use `-m` or `--merge-regions` to merge edge-adjacent shapes with the
+exact same palette assignment into one outlined printable region with one code. Corner-only contacts
+and disconnected areas remain separate.
+
+The default keeps one code per shape; `-M` or `--no-merge-regions` states that default explicitly.
+Assignment CSV rows remain per original square or polygon, while legend and summary files report
+both base assignments and rendered-region counts.
 
 Changing from 43 by 30 to 86 by 60 increases the number of image samples from 1,290 to 5,160. It
 does not enlarge the grid's physical page footprint because both grids have the same aspect ratio;
@@ -113,15 +125,17 @@ assignments to 104 with a lower mean error of 14.910.
 
 ## Print the artwork pages
 
-The generated `color_by_number_grid_only.pdf` contains two full Letter pages with identical grid
-positions and 0.6-inch minimum margins:
+The generated `color_by_number_grid_only.pdf` contains two full Letter pages with matching
+printable-region geometry and 0.6-inch minimum margins. By default, each region is one grid cell;
+`-m` can join adjacent same-color cells:
 
 1. Page one has light-gray grid lines and no codes. Color this page as the final artwork.
-2. Page two has black grid lines and one marker code in every cell. Use it as the reference.
+2. Page two has black grid lines and one marker code in every printed region. Use it as the
+   reference.
 
-Print both at actual size in the generated orientation. The cells line up exactly because ReportLab
-draws both pages from the same point-based geometry. Fitting to the printer area also keeps cells
-square, but both pages must use the same print scaling.
+Print both at actual size in the generated orientation. The region bounds line up because ReportLab
+draws both pages from the same point-based geometry. Fitting to the printer area also keeps default
+cells square, but both pages must use the same print scaling.
 
 The separate `color_by_number.pdf` is the marker-key worksheet. It uses 0.65-inch outer margins and
 places a smaller numbered grid on the left beside a two-column colored key on the right.
@@ -129,10 +143,12 @@ places a smaller numbered grid on the left beside a two-column colored key on th
 Every grid cell remains unfilled. Only the side-key swatches in the marker-key worksheet contain
 color.
 
-For Voronoi output, `<stem>.pdf` contains three aligned Letter pages with the same bounded polygons:
-a blank light-gray artwork page, a black numbered reference page, and a filled palette reference
-page. Numbered labels are centered at each polygon's area centroid. Print all three at the same scale
-when using the reference pages with the blank artwork.
+For Voronoi output, `<stem>.pdf` contains three aligned Letter pages with the same printable
+regions and boundaries: a blank light-gray artwork page, a black numbered reference page, and a
+filled palette reference page. Numbered labels prefer each region's area centroid, then shift only
+when the measured code box needs a fully contained PDF-space position. If a region is too small for
+the complete code box, the label uses its maximum-clearance interior point so the PDF still
+completes. Print all three at the same scale when using the reference pages with the blank artwork.
 
 ## Output files
 
@@ -143,7 +159,7 @@ when using the reference pages with the blank artwork.
 | `color_by_number_marker_preview.png` | Filled preview of the selected marker colors. |
 | `color_by_number_source_preview.png` | Unquantized, orientation-matched source-color reference. |
 | `color_by_number_assignments.csv` | Row, column, marker code, color name, and RGB per square. |
-| `color_by_number_legend.csv` | All marker colors and their assigned square counts. |
+| `color_by_number_legend.csv` | All marker colors: base square and rendered-region counts. |
 | `color_by_number_summary.txt` | Inputs, grid invariants, fit mode, enhancement, and metrics. |
 
 ## Voronoi output files
@@ -157,7 +173,7 @@ companions share the same stem:
 | `color_by_number_polygon_preview.png` | Palette-colored polygon preview with visible boundaries. |
 | `color_by_number_source_preview.png` | Fitted source-color reference at the polygon sampling resolution. |
 | `color_by_number_polygon_assignments.csv` | One stable site-ordered polygon assignment, including sampled source RGB and Delta E 76. |
-| `color_by_number_legend.csv` | Every palette color and its assigned polygon count. |
+| `color_by_number_legend.csv` | Every palette color: base polygon and rendered-region counts. |
 | `color_by_number_summary.txt` | Resolved layout, generated seed, point-spacing policy, matching metrics, and label diagnostics. |
 
 ## Marker palette data

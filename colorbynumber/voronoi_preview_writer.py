@@ -10,6 +10,7 @@ import PIL.ImageDraw
 
 # local repo modules
 import colorbynumber.voronoi_geometry
+import colorbynumber.render_regions
 
 
 COMPARISON_HEADER_HEIGHT = 28
@@ -17,14 +18,14 @@ COMPARISON_HEADER_HEIGHT = 28
 
 #============================================
 def _pixel_vertex(
-	partition: colorbynumber.voronoi_geometry.Partition,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	vertex: tuple[float, float],
 	width: int,
 	height: int,
 ) -> tuple[float, float]:
 	"""Map one domain vertex to top-left raster coordinates."""
-	x = vertex[0] * width / partition.domain.width
-	y = (partition.domain.height - vertex[1]) * height / partition.domain.height
+	x = vertex[0] * width / domain.width
+	y = (domain.height - vertex[1]) * height / domain.height
 	point = (x, y)
 	return point
 
@@ -42,7 +43,7 @@ def draw_partition_lines(
 	draw = PIL.ImageDraw.Draw(image)
 	for cell in partition.cells:
 		points = [
-			_pixel_vertex(partition, vertex, image.width, image.height)
+			_pixel_vertex(partition.domain, vertex, image.width, image.height)
 			for vertex in cell.vertices
 		]
 		points.append(points[0])
@@ -54,14 +55,38 @@ def draw_partition_lines(
 
 
 #============================================
+def draw_region_lines(
+	image: PIL.Image.Image,
+	domain: colorbynumber.voronoi_geometry.Domain,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+	line_color: tuple[int, int, int] = (42, 42, 42),
+	line_width: int = 1,
+) -> None:
+	"""Draw printable-region exterior and hole boundaries onto a preview."""
+	if line_width <= 0:
+		raise ValueError("Preview line width must be greater than zero")
+	draw = PIL.ImageDraw.Draw(image)
+	for region in regions:
+		for ring in (region.polygon.exterior, *region.polygon.interiors):
+			points = [
+				_pixel_vertex(domain, vertex, image.width, image.height)
+				for vertex in ring.coords
+			]
+			draw.line(points, fill=line_color, width=line_width, joint="curve")
+	draw.rectangle((0, 0, image.width - 1, image.height - 1), outline=line_color, width=line_width)
+
+
+#============================================
 def write_polygon_preview(
 	reconstruction_rgb: numpy.ndarray,
-	partition: colorbynumber.voronoi_geometry.Partition,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	output_path: pathlib.Path,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
-	"""Write one palette-colored polygon preview with visible cell boundaries."""
+	"""Write one palette-colored preview with visible printable-region boundaries."""
+	colorbynumber.render_regions.validate_region_geometries(regions)
 	image = PIL.Image.fromarray(reconstruction_rgb.astype(numpy.uint8), mode="RGB")
-	draw_partition_lines(image, partition)
+	draw_region_lines(image, domain, regions)
 	output_path.parent.mkdir(parents=True, exist_ok=True)
 	image.save(output_path)
 

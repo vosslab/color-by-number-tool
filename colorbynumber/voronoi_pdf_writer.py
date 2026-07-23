@@ -1,20 +1,23 @@
 """Prototype-only bounded-polygon Letter PDF writing."""
 
 # Standard Library
-import pathlib
 import dataclasses
+import pathlib
 
 # PIP3 modules
 import numpy
-import shapely
 import reportlab.lib.colors
 import reportlab.lib.pagesizes
 import reportlab.pdfbase.pdfmetrics
 import reportlab.pdfgen.canvas
+import shapely
+import shapely.affinity
 
 # local repo modules
 import colorbynumber.constants
+import colorbynumber.label_placement
 import colorbynumber.marker_color
+import colorbynumber.render_regions
 import colorbynumber.voronoi_geometry
 
 
@@ -46,10 +49,13 @@ class VoronoiPageLayout:
 #============================================
 @dataclasses.dataclass(frozen=True)
 class LabelDiagnostics:
-	"""Measured first-prototype polygon-centroid label fit limitations."""
+	"""Measured label-placement and overlap evidence for the numbered page."""
 
 	font_size_points: float
-	outside_owned_cell_count: int
+	shifted_label_count: int
+	best_effort_label_count: int
+	total_shift_points: float
+	maximum_shift_points: float
 	overlap_pair_count: int
 
 
@@ -88,34 +94,13 @@ def calculate_layout(
 
 #============================================
 def calculate_code_font_size(
-	partition: colorbynumber.voronoi_geometry.Partition,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	layout: VoronoiPageLayout,
 ) -> float:
 	"""Choose one conservative common size from nominal polygon spacing."""
-	nominal_points = partition.domain.nominal_spacing * layout.scale
+	nominal_points = domain.nominal_spacing * layout.scale
 	font_size = min(MAXIMUM_CODE_FONT_SIZE, CODE_SIZE_FRACTION * nominal_points)
 	return font_size
-
-
-#============================================
-def _validate_assignments(
-	partition: colorbynumber.voronoi_geometry.Partition,
-	indices: numpy.ndarray,
-	palette: list[colorbynumber.marker_color.MarkerColor],
-) -> None:
-	"""Validate one-dimensional site-ordered palette assignments."""
-	if not isinstance(indices, numpy.ndarray):
-		raise ValueError("Polygon palette assignments must be a NumPy array")
-	if indices.ndim != 1 or indices.size == 0:
-		raise ValueError("Polygon palette assignments must be a nonempty one-dimensional array")
-	if not numpy.issubdtype(indices.dtype, numpy.integer):
-		raise ValueError("Polygon palette assignments must be integers")
-	if indices.size != partition.domain.site_count:
-		raise ValueError("Polygon palette assignments must follow stable site order")
-	if not palette:
-		raise ValueError("Polygon palette must not be empty")
-	if numpy.any(indices < 0) or numpy.any(indices >= len(palette)):
-		raise ValueError("Polygon palette assignments must identify available colors")
 
 
 #============================================
@@ -131,19 +116,21 @@ def _pdf_vertex(
 
 
 #============================================
-def _cell_path(
+def _polygon_path(
 	pdf: reportlab.pdfgen.canvas.Canvas,
 	layout: VoronoiPageLayout,
-	cell: colorbynumber.voronoi_geometry.Cell,
+	polygon: shapely.Polygon,
 ) -> reportlab.pdfgen.pathobject.PDFPathObject:
-	"""Build one closed ReportLab path from canonical open-ring vertices."""
+	"""Build one closed even-odd path from a Shapely polygon and its holes."""
 	path = pdf.beginPath()
-	first_x, first_y = _pdf_vertex(layout, cell.vertices[0])
-	path.moveTo(first_x, first_y)
-	for vertex in cell.vertices[1:]:
-		x, y = _pdf_vertex(layout, vertex)
-		path.lineTo(x, y)
-	path.close()
+	for ring in (polygon.exterior, *polygon.interiors):
+		coordinates = list(ring.coords)
+		first_x, first_y = _pdf_vertex(layout, coordinates[0])
+		path.moveTo(first_x, first_y)
+		for vertex in coordinates[1:]:
+			x, y = _pdf_vertex(layout, vertex)
+			path.lineTo(x, y)
+		path.close()
 	return path
 
 
@@ -169,16 +156,15 @@ def _draw_outer_border(
 #============================================
 def draw_blank_page(
 	pdf: reportlab.pdfgen.canvas.Canvas,
-	partition: colorbynumber.voronoi_geometry.Partition,
 	layout: VoronoiPageLayout,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
 	"""Draw white polygons with the square control's light-gray line policy."""
 	pdf.setFillColor(reportlab.lib.colors.white)
 	pdf.setStrokeColorRGB(BLANK_LINE_GRAY, BLANK_LINE_GRAY, BLANK_LINE_GRAY)
 	pdf.setLineWidth(CELL_LINE_WIDTH)
-	for cell in partition.cells:
-		path = _cell_path(pdf, layout, cell)
-		pdf.drawPath(path, stroke=1, fill=1)
+	for region in regions:
+		pdf.drawPath(_polygon_path(pdf, layout, region.polygon), stroke=1, fill=1, fillMode=0)
 	border_color = reportlab.lib.colors.Color(
 		BLANK_LINE_GRAY,
 		BLANK_LINE_GRAY,
@@ -190,70 +176,75 @@ def draw_blank_page(
 #============================================
 def _label_baseline(y_center: float, font_size: float) -> float:
 	"""Return a baseline that centers Helvetica vertically on a label anchor."""
-	ascent = reportlab.pdfbase.pdfmetrics.getAscent(CODE_FONT_NAME) * font_size / 1000.0
-	descent = reportlab.pdfbase.pdfmetrics.getDescent(CODE_FONT_NAME) * font_size / 1000.0
-	baseline = y_center - (ascent + descent) / 2.0
+	baseline = colorbynumber.label_placement.centered_text_baseline(
+		y_center, CODE_FONT_NAME, font_size
+	)
 	return baseline
 
 
 #============================================
-def _cell_centroid(
-	cell: colorbynumber.voronoi_geometry.Cell,
-) -> tuple[float, float]:
-	"""Return the Shapely area centroid of one authoritative owned polygon."""
-	polygon = shapely.Polygon(cell.vertices)
-	centroid = polygon.centroid
-	anchor = (centroid.x, centroid.y)
-	return anchor
+def _region_polygon_pdf(
+	layout: VoronoiPageLayout,
+	polygon: shapely.Polygon,
+) -> shapely.Polygon:
+	"""Transform one normalized printable region into physical PDF-point coordinates."""
+	scaled = shapely.affinity.scale(
+		polygon,
+		xfact=layout.scale,
+		yfact=layout.scale,
+		origin=(0.0, 0.0),
+	)
+	pdf_polygon = shapely.affinity.translate(
+		scaled,
+		xoff=layout.polygon_x,
+		yoff=layout.polygon_y,
+	)
+	return pdf_polygon
 
 
 #============================================
-def _label_box_domain(
+def resolve_label_placements(
+	domain: colorbynumber.voronoi_geometry.Domain,
+	palette: list[colorbynumber.marker_color.MarkerColor],
 	layout: VoronoiPageLayout,
-	anchor: tuple[float, float],
-	code: str,
-	font_size: float,
-) -> shapely.Polygon:
-	"""Return one polygon-centroid text box in normalized domain units."""
-	width_points = reportlab.pdfbase.pdfmetrics.stringWidth(
-		code,
-		CODE_FONT_NAME,
-		font_size,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+) -> tuple[colorbynumber.label_placement.LabelPlacement, ...]:
+	"""Resolve all Voronoi labels once for shared diagnostics and PDF drawing."""
+	font_size = calculate_code_font_size(domain, layout)
+	placements = tuple(
+		colorbynumber.label_placement.place_label(
+			_region_polygon_pdf(layout, region.polygon),
+			palette[region.palette_index].code,
+			CODE_FONT_NAME,
+			font_size,
+			region.member_identifiers,
+		)
+		for region in regions
 	)
-	anchor_x, anchor_y = anchor
-	y_center = layout.polygon_y + anchor_y * layout.scale
-	baseline = _label_baseline(y_center, font_size)
-	ascent = reportlab.pdfbase.pdfmetrics.getAscent(CODE_FONT_NAME) * font_size / 1000.0
-	descent = reportlab.pdfbase.pdfmetrics.getDescent(CODE_FONT_NAME) * font_size / 1000.0
-	minimum_x = anchor_x - width_points / (2.0 * layout.scale)
-	maximum_x = anchor_x + width_points / (2.0 * layout.scale)
-	minimum_y = (baseline + descent - layout.polygon_y) / layout.scale
-	maximum_y = (baseline + ascent - layout.polygon_y) / layout.scale
-	box = shapely.box(minimum_x, minimum_y, maximum_x, maximum_y)
-	return box
+	return placements
 
 
 #============================================
 def analyze_labels(
-	partition: colorbynumber.voronoi_geometry.Partition,
-	indices: numpy.ndarray,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	layout: VoronoiPageLayout,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> LabelDiagnostics:
-	"""Measure polygon-centroid code containment and text-box overlap."""
-	_validate_assignments(partition, indices, palette)
-	font_size = calculate_code_font_size(partition, layout)
-	boxes: list[shapely.Polygon] = []
-	outside_count = 0
-	for cell in partition.cells:
-		marker = palette[int(indices[cell.site_identifier])]
-		anchor = _cell_centroid(cell)
-		box = _label_box_domain(layout, anchor, marker.code, font_size)
-		boxes.append(box)
-		cell_polygon = shapely.Polygon(cell.vertices)
-		covered = cell_polygon.buffer(partition.domain.coordinate_tolerance).covers(box)
-		if not covered:
-			outside_count += 1
+	"""Resolve labels and measure their shifts plus final text-box overlap."""
+	font_size = calculate_code_font_size(domain, layout)
+	placements = resolve_label_placements(domain, palette, layout, regions)
+	diagnostics = analyze_resolved_labels(font_size, placements)
+	return diagnostics
+
+
+#============================================
+def analyze_resolved_labels(
+	font_size: float,
+	placements: tuple[colorbynumber.label_placement.LabelPlacement, ...],
+) -> LabelDiagnostics:
+	"""Measure diagnostics from the exact placements used by the numbered PDF page."""
+	boxes = [placement.text_box for placement in placements]
 	box_array = numpy.asarray(boxes, dtype=object)
 	query_pairs = shapely.STRtree(box_array).query(box_array, predicate="intersects")
 	overlap_count = 0
@@ -264,7 +255,14 @@ def analyze_labels(
 			overlap_count += 1
 	diagnostics = LabelDiagnostics(
 		font_size_points=font_size,
-		outside_owned_cell_count=outside_count,
+		shifted_label_count=sum(not placement.used_centroid for placement in placements),
+		best_effort_label_count=sum(
+			placement.used_best_effort for placement in placements
+		),
+		total_shift_points=sum(placement.shift_distance_points for placement in placements),
+		maximum_shift_points=max(
+			(placement.shift_distance_points for placement in placements), default=0.0
+		),
 		overlap_pair_count=overlap_count,
 	)
 	return diagnostics
@@ -273,63 +271,71 @@ def analyze_labels(
 #============================================
 def draw_numbered_page(
 	pdf: reportlab.pdfgen.canvas.Canvas,
-	partition: colorbynumber.voronoi_geometry.Partition,
-	indices: numpy.ndarray,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	layout: VoronoiPageLayout,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+	placements: tuple[colorbynumber.label_placement.LabelPlacement, ...],
 ) -> None:
-	"""Draw black polygon edges and codes at owned-polygon area centroids."""
+	"""Draw black printable-region edges and the already-resolved codes."""
 	pdf.setFillColor(reportlab.lib.colors.white)
 	pdf.setStrokeColor(reportlab.lib.colors.black)
 	pdf.setLineWidth(CELL_LINE_WIDTH)
-	for cell in partition.cells:
-		path = _cell_path(pdf, layout, cell)
-		pdf.drawPath(path, stroke=1, fill=1)
+	for region in regions:
+		pdf.drawPath(_polygon_path(pdf, layout, region.polygon), stroke=1, fill=1, fillMode=0)
 	_draw_outer_border(pdf, layout, reportlab.lib.colors.black)
-	font_size = calculate_code_font_size(partition, layout)
+	font_size = calculate_code_font_size(domain, layout)
 	pdf.setFillColor(reportlab.lib.colors.black)
 	pdf.setFont(CODE_FONT_NAME, font_size)
-	for cell in partition.cells:
-		marker = palette[int(indices[cell.site_identifier])]
-		anchor_x, anchor_y = _cell_centroid(cell)
-		x_center = layout.polygon_x + anchor_x * layout.scale
-		y_center = layout.polygon_y + anchor_y * layout.scale
-		baseline = _label_baseline(y_center, font_size)
-		pdf.drawCentredString(x_center, baseline, marker.code)
+	for region, placement in zip(regions, placements, strict=True):
+		marker = palette[region.palette_index]
+		baseline = _label_baseline(placement.anchor[1], font_size)
+		pdf.drawCentredString(placement.anchor[0], baseline, marker.code)
 
 
 #============================================
 def draw_reference_page(
 	pdf: reportlab.pdfgen.canvas.Canvas,
-	partition: colorbynumber.voronoi_geometry.Partition,
-	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	layout: VoronoiPageLayout,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
-	"""Draw the assigned palette color inside every owned polygon."""
+	"""Draw the assigned palette color inside every printable region."""
 	pdf.setStrokeColorRGB(0.25, 0.25, 0.25)
 	pdf.setLineWidth(CELL_LINE_WIDTH)
-	for cell in partition.cells:
-		marker = palette[int(indices[cell.site_identifier])]
+	for region in regions:
+		marker = palette[region.palette_index]
 		red, green, blue = marker.rgb
 		pdf.setFillColorRGB(red / 255.0, green / 255.0, blue / 255.0)
-		path = _cell_path(pdf, layout, cell)
-		pdf.drawPath(path, stroke=1, fill=1)
+		pdf.drawPath(_polygon_path(pdf, layout, region.polygon), stroke=1, fill=1, fillMode=0)
 	_draw_outer_border(pdf, layout, reportlab.lib.colors.black)
 
 
 #============================================
 def write_pdf(
-	partition: colorbynumber.voronoi_geometry.Partition,
-	indices: numpy.ndarray,
+	domain: colorbynumber.voronoi_geometry.Domain,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	page_orientation: str,
 	output_path: pathlib.Path,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> LabelDiagnostics:
-	"""Write blank, numbered, and palette-reference prototype polygon pages."""
-	_validate_assignments(partition, indices, palette)
-	layout = calculate_layout(page_orientation, partition.domain)
-	diagnostics = analyze_labels(partition, indices, palette, layout)
+	"""Write blank, numbered, and palette-reference printable-region pages.
+
+	Args:
+		domain: Normalized Voronoi domain.
+		palette: Available marker colors.
+		page_orientation: Resolved landscape or portrait orientation.
+		output_path: Destination PDF path.
+		regions: Concrete printable regions derived from Voronoi assignments.
+
+	Returns:
+		Measured label-fit diagnostics for the numbered page.
+	"""
+	colorbynumber.render_regions.validate_regions(regions, len(palette))
+	layout = calculate_layout(page_orientation, domain)
+	placements = resolve_label_placements(domain, palette, layout, regions)
+	font_size = calculate_code_font_size(domain, layout)
+	diagnostics = analyze_resolved_labels(font_size, placements)
 	output_path.parent.mkdir(parents=True, exist_ok=True)
 	page_size = (layout.page_width, layout.page_height)
 	pdf = reportlab.pdfgen.canvas.Canvas(str(output_path), pagesize=page_size)
@@ -337,11 +343,11 @@ def write_pdf(
 	pdf.setAuthor("color-by-number-tool")
 	pdf.setSubject("Blank, numbered, and palette-reference bounded polygons")
 	pdf.setCreator("color-by-number-tool")
-	draw_blank_page(pdf, partition, layout)
+	draw_blank_page(pdf, layout, regions)
 	pdf.showPage()
-	draw_numbered_page(pdf, partition, indices, palette, layout)
+	draw_numbered_page(pdf, domain, palette, layout, regions, placements)
 	pdf.showPage()
-	draw_reference_page(pdf, partition, indices, palette, layout)
+	draw_reference_page(pdf, palette, layout, regions)
 	pdf.showPage()
 	pdf.save()
 	return diagnostics

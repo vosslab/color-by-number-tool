@@ -33,6 +33,8 @@ The [../colorbynumber/](../colorbynumber/) package is divided by responsibility:
 - [../colorbynumber/color_metrics.py](../colorbynumber/color_metrics.py) and
   [../colorbynumber/color_matcher.py](../colorbynumber/color_matcher.py) implement perceptual color
   assignment.
+- [../colorbynumber/render_regions.py](../colorbynumber/render_regions.py) creates the common
+  printable-region projection for ordinary and merged square or Voronoi shapes.
 - [../colorbynumber/pdf_writer.py](../colorbynumber/pdf_writer.py) and
   [../colorbynumber/grid_only_pdf_writer.py](../colorbynumber/grid_only_pdf_writer.py) create vector
   Letter PDFs with ReportLab.
@@ -104,6 +106,8 @@ Generated filenames and their contents are listed in [USAGE.md](USAGE.md).
 - [VISION_PIPELINE.md](VISION_PIPELINE.md) records the image-processing and print-geometry contracts.
 - [GEOMETRY_MODEL.md](GEOMETRY_MODEL.md) defines the Voronoi coordinate, tolerance,
   degeneracy, and validation contracts; the analytical square cells are comparison controls.
+- [REGION_PIPELINE.md](REGION_PIPELINE.md) traces source shapes, assignments, render regions, and
+  all printable-region consumers.
 - [CODE_ARCHITECTURE.md](CODE_ARCHITECTURE.md) describes runtime components and data flow.
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) diagnoses setup, input, output, printing, and color issues.
 - [FAQ.md](FAQ.md) answers common workflow and output questions.

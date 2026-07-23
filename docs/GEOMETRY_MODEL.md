@@ -80,12 +80,18 @@ than the site and partition representation.
 - Preview and PDF writers consume stable site-ordered polygon assignments. Palette ownership is
   always `cell.site_identifier`; identifiers remain polygon identifiers rather than row-and-column
   coordinates.
-- Each numbered-code anchor is the Shapely area centroid of its authoritative clipped owned polygon.
-  The writer computes that centroid deterministically from the canonical cell vertices used to draw
-  the polygon, after construction and validation.
-- Preview and PDF writers use one common font policy and retain label-containment and label-overlap
-  diagnostics. Centroid placement is the good-enough anchor rule; it is not a
-  largest-inscribed-region optimization and does not promise clearance from every polygon edge.
+- Each numbered-code anchor starts at the Shapely area centroid of its authoritative printable
+  polygon. The writer transforms that polygon into PDF points and measures the actual ReportLab
+  code width, ascent, and descent before placing the label.
+- Every measured glyph box includes a preferred `0.25`-point inward padding. If the exact centroid
+  box fails, the writer constructs every positive-area feasible center component by subtracting
+  the axis-aligned padded-box dilation of the polygon complement; a deterministic interior point
+  from each component is revalidated in the original polygon. The configuration-space construction
+  handles concavities and holes without changing region geometry or relying on sampled anchors.
+- If a region is too small for the complete padded box, the code uses the polygon's
+  maximum-clearance interior point and PDF generation continues. Voronoi summaries record that
+  best-effort placement alongside shifted-label count, total and maximum shift in points, and
+  overlap pairs from the resolved boxes.
 
 ### Tests
 

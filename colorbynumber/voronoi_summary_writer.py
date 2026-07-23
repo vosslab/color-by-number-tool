@@ -29,8 +29,13 @@ class VoronoiRunSummary:
 	seam_fallback_pixel_count: int
 	polygon_fallback_count: int
 	label_font_size_points: float
-	labels_outside_owned_cell_count: int
+	shifted_label_count: int
+	best_effort_label_count: int
+	total_label_shift_points: float
+	maximum_label_shift_points: float
 	label_overlap_pair_count: int
+	merge_regions: bool
+	rendered_region_count: int
 
 	def __post_init__(self) -> None:
 		"""Reject malformed summary values before a durable output is written."""
@@ -58,11 +63,37 @@ class VoronoiRunSummary:
 			self.seam_fallback_pixel_count,
 		)
 		_validate_nonnegative_count("polygon fallback count", self.polygon_fallback_count)
+		_validate_nonnegative_count("shifted label count", self.shifted_label_count)
 		_validate_nonnegative_count(
-			"labels outside owned cell count",
-			self.labels_outside_owned_cell_count,
+			"best-effort label count",
+			self.best_effort_label_count,
 		)
+		_validate_finite_metric("total label shift", self.total_label_shift_points)
+		_validate_nonnegative_metric("total label shift", self.total_label_shift_points)
+		_validate_finite_metric("maximum label shift", self.maximum_label_shift_points)
+		_validate_nonnegative_metric("maximum label shift", self.maximum_label_shift_points)
 		_validate_nonnegative_count("label overlap pair count", self.label_overlap_pair_count)
+		_validate_nonnegative_count("rendered region count", self.rendered_region_count)
+		if self.rendered_region_count == 0:
+			raise ValueError("Voronoi summary rendered region count must be greater than zero")
+		if self.rendered_region_count > self.columns * self.rows:
+			raise ValueError("Voronoi summary rendered region count exceeds the site count")
+		if self.shifted_label_count > self.rendered_region_count:
+			raise ValueError("Voronoi summary shifted label count exceeds rendered region count")
+		if self.best_effort_label_count > self.rendered_region_count:
+			raise ValueError("Voronoi summary best-effort label count exceeds rendered region count")
+		if self.shifted_label_count == 0:
+			if self.total_label_shift_points != 0.0 or self.maximum_label_shift_points != 0.0:
+				raise ValueError(
+					"Voronoi summary zero shifted labels require zero total and maximum label shift"
+				)
+		else:
+			if self.total_label_shift_points <= 0.0 or self.maximum_label_shift_points <= 0.0:
+				raise ValueError(
+					"Voronoi summary shifted labels require positive total and maximum label shift"
+				)
+		if self.maximum_label_shift_points > self.total_label_shift_points:
+			raise ValueError("Voronoi summary maximum label shift exceeds total label shift")
 
 
 #============================================
@@ -99,6 +130,7 @@ def write_summary(summary: VoronoiRunSummary, output_path: pathlib.Path) -> None
 		output_path: Destination text file.
 	"""
 	site_count = summary.columns * summary.rows
+	rendered_region_count = summary.rendered_region_count
 	attempt_budget = (
 		colorbynumber.voronoi_prototype.HARD_CORE_ATTEMPT_MULTIPLIER * site_count
 	)
@@ -111,6 +143,8 @@ def write_summary(summary: VoronoiRunSummary, output_path: pathlib.Path) -> None
 			"Voronoi polygons: "
 			f"N={site_count} ({summary.columns} * {summary.rows})"
 		),
+		f"Merge same-color regions: {'enabled' if summary.merge_regions else 'disabled'}",
+		f"Rendered regions: {rendered_region_count} (reduction: {site_count - rendered_region_count})",
 		f"Fit mode: {summary.fit_mode}",
 		f"Page orientation: {summary.page_orientation}",
 		f"Color enhancement: {summary.enhancement}",
@@ -143,10 +177,10 @@ def write_summary(summary: VoronoiRunSummary, output_path: pathlib.Path) -> None
 		f"Numerical seam fallback pixels: {summary.seam_fallback_pixel_count}",
 		f"Zero-pixel polygon fallbacks: {summary.polygon_fallback_count}",
 		f"Label font size (points): {summary.label_font_size_points:.3f}",
-		(
-			"Labels outside owned polygon: "
-			f"{summary.labels_outside_owned_cell_count}"
-		),
+		f"Shifted labels: {summary.shifted_label_count}",
+		f"Best-effort labels: {summary.best_effort_label_count}",
+		f"Total label shift (points): {summary.total_label_shift_points:.3f}",
+		f"Maximum label shift (points): {summary.maximum_label_shift_points:.3f}",
 		f"Label overlap pairs: {summary.label_overlap_pair_count}",
 	]
 	text = "\n".join(lines) + "\n"

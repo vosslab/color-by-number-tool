@@ -4,7 +4,6 @@
 import pathlib
 
 # PIP3 modules
-import numpy
 import reportlab.lib.colors
 import reportlab.lib.pagesizes
 import reportlab.pdfgen.canvas
@@ -13,6 +12,7 @@ import reportlab.pdfgen.canvas
 import colorbynumber.constants
 import colorbynumber.marker_color
 import colorbynumber.pdf_writer
+import colorbynumber.render_regions
 
 
 GRID_ONLY_MARGIN = 0.6 * colorbynumber.pdf_writer.POINTS_PER_INCH
@@ -73,69 +73,34 @@ def calculate_layout(
 
 
 #============================================
-def draw_blank_grid(
-	pdf: reportlab.pdfgen.canvas.Canvas,
-	layout: colorbynumber.pdf_writer.PageLayout,
-) -> None:
-	"""Draw a light-gray grid with no marker codes.
-
-	Args:
-		pdf: ReportLab canvas for the output page.
-		layout: Computed full-page grid layout.
-	"""
-	pdf.setFillColor(reportlab.lib.colors.white)
-	pdf.rect(
-		layout.grid_x,
-		layout.grid_y,
-		layout.grid_width,
-		layout.grid_height,
-		stroke=0,
-		fill=1,
-	)
-	pdf.setStrokeColorRGB(BLANK_GRID_GRAY, BLANK_GRID_GRAY, BLANK_GRID_GRAY)
-	pdf.setLineWidth(0.3)
-	for column in range(layout.columns + 1):
-		x_position = layout.grid_x + column * layout.cell_size
-		pdf.line(x_position, layout.grid_y, x_position, layout.grid_y + layout.grid_height)
-	for row in range(layout.rows + 1):
-		y_position = layout.grid_y + row * layout.cell_size
-		pdf.line(layout.grid_x, y_position, layout.grid_x + layout.grid_width, y_position)
-	pdf.setLineWidth(0.7)
-	pdf.rect(
-		layout.grid_x,
-		layout.grid_y,
-		layout.grid_width,
-		layout.grid_height,
-		stroke=1,
-		fill=0,
-	)
-
-
-#============================================
 def write_pdf(
-	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	page_orientation: str,
+	columns: int,
+	rows: int,
 	output_path: pathlib.Path,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
 	"""Write aligned blank-artwork and numbered-reference Letter pages.
 
 	Args:
-		indices: Palette index for every grid square.
 		palette: Available marker colors.
 		page_orientation: Resolved landscape or portrait orientation.
+		columns: Number of square columns.
+		rows: Number of square rows.
 		output_path: Destination PDF path.
+		regions: Concrete printable regions derived from square assignments.
 	"""
-	rows, columns = indices.shape
 	layout = calculate_layout(page_orientation, columns, rows)
+	colorbynumber.render_regions.validate_regions(regions, len(palette))
 	page_size = (layout.page_width, layout.page_height)
 	pdf = reportlab.pdfgen.canvas.Canvas(str(output_path), pagesize=page_size)
 	pdf.setTitle(f"{columns} x {rows} color-by-number artwork pages")
 	pdf.setAuthor("color-by-number-tool")
 	pdf.setSubject("Aligned blank artwork grid and numbered marker-code reference")
 	pdf.setCreator("color-by-number-tool")
-	draw_blank_grid(pdf, layout)
+	colorbynumber.pdf_writer.draw_blank_regions(pdf, layout, regions, BLANK_GRID_GRAY)
 	pdf.showPage()
-	colorbynumber.pdf_writer.draw_code_grid(pdf, layout, indices, palette)
+	colorbynumber.pdf_writer.draw_code_regions(pdf, layout, palette, regions)
 	pdf.showPage()
 	pdf.save()

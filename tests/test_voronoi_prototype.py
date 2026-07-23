@@ -13,7 +13,9 @@ import shapely
 
 # local repo modules
 import colorbynumber.constants
+import colorbynumber.label_placement
 import colorbynumber.marker_color
+import colorbynumber.render_regions
 import colorbynumber.voronoi_geometry
 import colorbynumber.voronoi_pdf_writer
 import colorbynumber.voronoi_preview_writer
@@ -92,6 +94,27 @@ def _numbered_code_position(
 	if len(positions) != 1:
 		raise ValueError(f"Expected one numbered {code!r} label, found {len(positions)}")
 	return positions[0]
+
+
+#============================================
+def _numbered_code_count(pdf_path: pathlib.Path, code: str) -> int:
+	"""Return the exact numbered-page PDF text count for one marker code."""
+	count = 0
+
+	def count_code(
+		text: str,
+		_user_matrix: list[float],
+		_text_matrix: list[float],
+		_font_dictionary: object,
+		_font_size: float,
+	) -> None:
+		"""Count one complete matching text token."""
+		nonlocal count
+		if text.strip() == code:
+			count += 1
+
+	pypdf.PdfReader(pdf_path).pages[1].extract_text(visitor_text=count_code)
+	return count
 
 
 #============================================
@@ -240,13 +263,9 @@ def test_pdf_rejects_noninteger_palette_assignments(
 	tmp_path: pathlib.Path,
 ) -> None:
 	"""Reject palette arrays that cannot safely identify PDF marker codes."""
-	with pytest.raises(ValueError, match="integers"):
-		colorbynumber.voronoi_pdf_writer.write_pdf(
-			_partition(2, 1),
-			assignments,
-			_palette(),
-			colorbynumber.constants.LANDSCAPE_ORIENTATION,
-			tmp_path / "invalid.pdf",
+	with pytest.raises(ValueError, match="integer"):
+		colorbynumber.render_regions.build_voronoi_regions(
+			_partition(2, 1), assignments, False
 		)
 
 
@@ -268,7 +287,12 @@ def test_preview_writer_draws_border_and_orders_comparison_panels(tmp_path: path
 	voronoi = numpy.full((8, 16, 3), (0, 0, 200), dtype=numpy.uint8)
 	preview_path = tmp_path / "preview.png"
 	comparison_path = tmp_path / "comparison.png"
-	colorbynumber.voronoi_preview_writer.write_polygon_preview(voronoi, partition, preview_path)
+	regions = colorbynumber.render_regions.build_voronoi_regions(
+		partition, numpy.array((0, 0), dtype=numpy.int64), False
+	)
+	colorbynumber.voronoi_preview_writer.write_polygon_preview(
+		voronoi, partition.domain, preview_path, regions
+	)
 	colorbynumber.voronoi_preview_writer.write_comparison(
 		source, square, voronoi, partition, comparison_path
 	)
@@ -283,6 +307,23 @@ def test_preview_writer_draws_border_and_orders_comparison_panels(tmp_path: path
 
 
 #============================================
+def test_merged_preview_removes_same_color_internal_edge(tmp_path: pathlib.Path) -> None:
+	"""A merged preview keeps the outer border without drawing its removed shared edge."""
+	partition = _partition(2, 1)
+	image = numpy.full((8, 16, 3), (0, 0, 200), dtype=numpy.uint8)
+	regions = colorbynumber.render_regions.build_voronoi_regions(
+		partition, numpy.array((0, 0), dtype=numpy.int64), True
+	)
+	output_path = tmp_path / "merged_preview.png"
+	colorbynumber.voronoi_preview_writer.write_polygon_preview(
+		image, partition.domain, output_path, regions
+	)
+	with PIL.Image.open(output_path) as preview:
+		assert preview.getpixel((0, 0)) == (42, 42, 42)
+		assert preview.getpixel((8, 4)) == (0, 0, 200)
+
+
+#============================================
 def test_centroid_labels_keep_an_asymmetric_clipped_cell_code_inside() -> None:
 	"""Use a displaced generator where its cell centroid avoids a site-edge label."""
 	partition = _asymmetric_one_cell_partition()
@@ -291,14 +332,18 @@ def test_centroid_labels_keep_an_asymmetric_clipped_cell_code_inside() -> None:
 		partition.domain,
 	)
 	diagnostics = colorbynumber.voronoi_pdf_writer.analyze_labels(
-		partition,
-		numpy.array((0,)),
+		partition.domain,
 		[colorbynumber.marker_color.MarkerColor("WIDE", "wide", (1, 2, 3))],
 		layout,
+		colorbynumber.render_regions.build_voronoi_regions(
+			partition, numpy.array((0,), dtype=numpy.int64), False
+		),
 	)
 	site_box = _centered_code_box((0.01, 0.01), "WIDE", diagnostics.font_size_points, layout)
 	domain = colorbynumber.voronoi_geometry.domain_polygon(partition.domain)
-	assert diagnostics.outside_owned_cell_count == 0 and not domain.covers(site_box)
+	assert diagnostics.shifted_label_count == 0
+	assert diagnostics.best_effort_label_count == 0
+	assert not domain.covers(site_box)
 
 
 #============================================
@@ -308,11 +353,13 @@ def test_numbered_page_places_asymmetric_cell_code_at_area_centroid(tmp_path: pa
 	palette = [colorbynumber.marker_color.MarkerColor("WIDE", "wide", (1, 2, 3))]
 	output_path = tmp_path / "centroid.pdf"
 	colorbynumber.voronoi_pdf_writer.write_pdf(
-		partition,
-		numpy.array((0,), dtype=numpy.int64),
+		partition.domain,
 		palette,
 		colorbynumber.constants.LANDSCAPE_ORIENTATION,
 		output_path,
+		colorbynumber.render_regions.build_voronoi_regions(
+			partition, numpy.array((0,), dtype=numpy.int64), False
+		),
 	)
 	text_x, text_y, font_size = _numbered_code_position(output_path, "WIDE")
 	layout = colorbynumber.voronoi_pdf_writer.calculate_layout(
@@ -331,3 +378,37 @@ def test_numbered_page_places_asymmetric_cell_code_at_area_centroid(tmp_path: pa
 		(expected_center_x, expected_baseline),
 		atol=0.01,
 	)
+	actual_anchor = (text_x + code_width / 2.0, expected_center_y)
+	actual_box = colorbynumber.label_placement.text_box(
+		actual_anchor, "WIDE", "Helvetica", font_size
+	)
+	physical_domain = colorbynumber.voronoi_pdf_writer._region_polygon_pdf(
+		layout, colorbynumber.voronoi_geometry.domain_polygon(partition.domain)
+	)
+	assert physical_domain.contains_properly(
+		colorbynumber.label_placement.padded_text_box(actual_box, 0.25)
+	)
+
+
+#============================================
+def test_voronoi_pdf_uses_one_code_per_resolved_render_region(tmp_path: pathlib.Path) -> None:
+	"""All three pages remain present while the numbered page follows regions exactly."""
+	partition = _partition(2, 1)
+	code = "MERGE-CHECK-42"
+	palette = [colorbynumber.marker_color.MarkerColor(code, "red", (255, 0, 0))]
+	indices = numpy.array((0, 0), dtype=numpy.int64)
+	merged_path = tmp_path / "merged.pdf"
+	unmerged_path = tmp_path / "unmerged.pdf"
+	merged = colorbynumber.render_regions.build_voronoi_regions(partition, indices, True)
+	unmerged = colorbynumber.render_regions.build_voronoi_regions(partition, indices, False)
+	colorbynumber.voronoi_pdf_writer.write_pdf(
+		partition.domain, palette, "landscape", merged_path, merged
+	)
+	colorbynumber.voronoi_pdf_writer.write_pdf(
+		partition.domain, palette, "landscape", unmerged_path, unmerged
+	)
+	merged_reader = pypdf.PdfReader(merged_path)
+	unmerged_reader = pypdf.PdfReader(unmerged_path)
+	assert (len(merged_reader.pages), len(unmerged_reader.pages)) == (3, 3)
+	assert _numbered_code_count(merged_path, code) == len(merged)
+	assert _numbered_code_count(unmerged_path, code) == len(unmerged)

@@ -10,6 +10,8 @@ import pytest
 
 # local repo modules
 import colorbynumber.marker_color
+import colorbynumber.render_regions
+import colorbynumber.voronoi_pdf_writer
 import colorbynumber.voronoi_csv_writer
 import colorbynumber.voronoi_geometry
 import colorbynumber.voronoi_summary_writer
@@ -50,8 +52,13 @@ def _summary(**changes: object) -> colorbynumber.voronoi_summary_writer.VoronoiR
 		"seam_fallback_pixel_count": 1,
 		"polygon_fallback_count": 2,
 		"label_font_size_points": 5.5,
-		"labels_outside_owned_cell_count": 3,
+		"shifted_label_count": 3,
+		"best_effort_label_count": 0,
+		"total_label_shift_points": 9.5,
+		"maximum_label_shift_points": 4.5,
 		"label_overlap_pair_count": 4,
+		"merge_regions": False,
+		"rendered_region_count": 6,
 	}
 	values.update(changes)
 	return colorbynumber.voronoi_summary_writer.VoronoiRunSummary(**values)  # type: ignore[arg-type]
@@ -93,10 +100,12 @@ def test_assignment_csv_records_the_chosen_marker_for_each_site(tmp_path: pathli
 #============================================
 def test_legend_csv_records_an_unused_palette_color(tmp_path: pathlib.Path) -> None:
 	output_path = tmp_path / "legend.csv"
+	partition = _partition()
+	indices = numpy.array((1, 1), dtype=numpy.int64)
 	colorbynumber.voronoi_csv_writer.write_legend_csv(
-		numpy.array((1, 1), dtype=numpy.int64),
 		_palette(),
 		output_path,
+		colorbynumber.render_regions.build_voronoi_regions(partition, indices, False),
 	)
 	with output_path.open(newline="", encoding="utf-8") as handle:
 		rows = {row["code"]: row for row in csv.DictReader(handle)}
@@ -106,10 +115,12 @@ def test_legend_csv_records_an_unused_palette_color(tmp_path: pathlib.Path) -> N
 #============================================
 def test_legend_csv_records_a_used_palette_color(tmp_path: pathlib.Path) -> None:
 	output_path = tmp_path / "legend.csv"
+	partition = _partition()
+	indices = numpy.array((1, 1), dtype=numpy.int64)
 	colorbynumber.voronoi_csv_writer.write_legend_csv(
-		numpy.array((1, 1), dtype=numpy.int64),
 		_palette(),
 		output_path,
+		colorbynumber.render_regions.build_voronoi_regions(partition, indices, False),
 	)
 	with output_path.open(newline="", encoding="utf-8") as handle:
 		rows = {row["code"]: row for row in csv.DictReader(handle)}
@@ -117,12 +128,35 @@ def test_legend_csv_records_a_used_palette_color(tmp_path: pathlib.Path) -> None
 
 
 #============================================
+def test_legend_csv_records_base_and_rendered_region_counts(tmp_path: pathlib.Path) -> None:
+	"""Legend preserves assignments while recording the printable region reduction."""
+	partition = _partition()
+	indices = numpy.array((1, 1), dtype=numpy.int64)
+	regions = colorbynumber.render_regions.build_voronoi_regions(partition, indices, True)
+	output_path = tmp_path / "legend.csv"
+	colorbynumber.voronoi_csv_writer.write_legend_csv(_palette(), output_path, regions)
+	with output_path.open(newline="", encoding="utf-8") as handle:
+		rows = {row["code"]: row for row in csv.DictReader(handle)}
+	assert (rows["B"]["polygon_count"], rows["B"]["region_count"]) == ("2", "1")
+
+
+#============================================
 @pytest.mark.parametrize(
 	("polygon_rgb", "indices", "errors", "message"),
 	[
 		(numpy.array(((1.0, 2.0), (3.0, 4.0))), numpy.array((0, 1)), numpy.array((1.0, 2.0)), "RGB"),
-		(numpy.array(((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))), numpy.array((0.0, 1.0)), numpy.array((1.0, 2.0)), "integers"),
-		(numpy.array(((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))), numpy.array((0, 3)), numpy.array((1.0, 2.0)), "available colors"),
+		(
+			numpy.array(((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))),
+			numpy.array((0.0, 1.0)),
+			numpy.array((1.0, 2.0)),
+			"integers",
+		),
+		(
+			numpy.array(((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))),
+			numpy.array((0, 3)),
+			numpy.array((1.0, 2.0)),
+			"available colors",
+		),
 	],
 )
 def test_assignment_csv_rejects_invalid_shape_type_and_palette_bounds(
@@ -159,6 +193,26 @@ def test_summary_records_resolved_polygon_count(tmp_path: pathlib.Path) -> None:
 
 
 #============================================
+def test_summary_records_rendered_region_reduction(tmp_path: pathlib.Path) -> None:
+	output_path = tmp_path / "summary.txt"
+	colorbynumber.voronoi_summary_writer.write_summary(
+		_summary(
+			columns=2,
+			rows=1,
+			merge_regions=True,
+			rendered_region_count=1,
+			shifted_label_count=1,
+			total_label_shift_points=1.0,
+			maximum_label_shift_points=1.0,
+		),
+		output_path,
+	)
+	text = output_path.read_text(encoding="utf-8")
+	assert "Merge same-color regions: enabled" in text
+	assert "Rendered regions: 1 (reduction: 1)" in text
+
+
+#============================================
 def test_summary_records_internal_replay_seed(tmp_path: pathlib.Path) -> None:
 	output_path = tmp_path / "summary.txt"
 	colorbynumber.voronoi_summary_writer.write_summary(_summary(seed=31415), output_path)
@@ -183,7 +237,18 @@ def test_summary_formats_color_error_measurements(tmp_path: pathlib.Path) -> Non
 	[
 		({"seam_fallback_pixel_count": 6}, "Numerical seam fallback pixels: 6"),
 		({"polygon_fallback_count": 8}, "Zero-pixel polygon fallbacks: 8"),
-		({"labels_outside_owned_cell_count": 10}, "Labels outside owned polygon: 10"),
+		(
+			{
+				"shifted_label_count": 0,
+				"total_label_shift_points": 0.0,
+				"maximum_label_shift_points": 0.0,
+			},
+			"Shifted labels: 0",
+		),
+		({"shifted_label_count": 5}, "Shifted labels: 5"),
+		({"best_effort_label_count": 2}, "Best-effort labels: 2"),
+		({"total_label_shift_points": 12.25}, "Total label shift (points): 12.250"),
+		({"maximum_label_shift_points": 4.25}, "Maximum label shift (points): 4.250"),
 		({"label_overlap_pair_count": 12}, "Label overlap pairs: 12"),
 	],
 )
@@ -204,6 +269,7 @@ def test_summary_records_diagnostic_counts(
 		({"columns": True}, "positive integer"),
 		({"mean_delta_e_76": float("inf")}, "finite number"),
 		({"polygon_fallback_count": -1}, "nonnegative integer"),
+		({"best_effort_label_count": -1}, "nonnegative integer"),
 	],
 )
 def test_summary_rejects_invalid_resolved_values(
@@ -230,5 +296,65 @@ def test_summary_rejects_invalid_color_error_measurements(
 	changes: dict[str, object],
 	message: str,
 ) -> None:
+	with pytest.raises(ValueError, match=message):
+		_summary(**changes)
+
+
+#============================================
+@pytest.mark.parametrize(
+	("changes", "message"),
+	[
+		({"shifted_label_count": 7}, "shifted label count exceeds rendered region count"),
+		(
+			{"best_effort_label_count": 7},
+			"best-effort label count exceeds rendered region count",
+		),
+		(
+			{
+				"shifted_label_count": 0,
+				"total_label_shift_points": 1.0,
+				"maximum_label_shift_points": 0.0,
+			},
+			"zero shifted labels require zero total and maximum label shift",
+		),
+		(
+			{
+				"shifted_label_count": 0,
+				"total_label_shift_points": 0.0,
+				"maximum_label_shift_points": 1.0,
+			},
+			"zero shifted labels require zero total and maximum label shift",
+		),
+		(
+			{
+				"shifted_label_count": 1,
+				"total_label_shift_points": 0.0,
+				"maximum_label_shift_points": 0.0,
+			},
+			"shifted labels require positive total and maximum label shift",
+		),
+		(
+			{
+				"shifted_label_count": 1,
+				"total_label_shift_points": 1.0,
+				"maximum_label_shift_points": 0.0,
+			},
+			"shifted labels require positive total and maximum label shift",
+		),
+		(
+			{
+				"shifted_label_count": 1,
+				"total_label_shift_points": 1.0,
+				"maximum_label_shift_points": 2.0,
+			},
+			"maximum label shift exceeds total label shift",
+		),
+	],
+)
+def test_summary_rejects_incoherent_label_shift_diagnostics(
+	changes: dict[str, object],
+	message: str,
+) -> None:
+	"""Reject impossible relationships among contained-label shift diagnostics."""
 	with pytest.raises(ValueError, match=message):
 		_summary(**changes)

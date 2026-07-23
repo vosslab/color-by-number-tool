@@ -9,6 +9,7 @@ import numpy
 
 # local repo modules
 import colorbynumber.marker_color
+import colorbynumber.render_regions
 import colorbynumber.voronoi_geometry
 
 
@@ -184,25 +185,36 @@ def write_assignments_csv(
 
 #============================================
 def write_legend_csv(
-	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	output_path: pathlib.Path,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
 	"""Write every marker color and its stable Voronoi polygon count.
 
 	Args:
-		indices: Nonempty one-dimensional polygon palette assignments.
 		palette: Available marker colors in stable legend order.
 		output_path: Destination CSV path.
+		regions: Concrete printable regions derived from polygon assignments.
 
 	Raises:
-		ValueError: Assignments or palette are invalid.
+		ValueError: Palette or regions are invalid.
 	"""
 	_validate_palette(palette)
-	_validate_indices(indices, palette, expected_count=None)
-	counts = numpy.bincount(indices, minlength=len(palette))
+	colorbynumber.render_regions.validate_regions(regions, len(palette))
+	base_counts = [0] * len(palette)
+	region_counts = [0] * len(palette)
+	for region in regions:
+		palette_index = region.palette_index
+		base_counts[palette_index] += len(region.member_identifiers)
+		region_counts[palette_index] += 1
 	with output_path.open("w", encoding="utf-8", newline="") as handle:
 		writer = csv.writer(handle)
-		writer.writerow(("code", "color_name", "red", "green", "blue", "polygon_count"))
-		for marker, count in zip(palette, counts, strict=True):
-			writer.writerow((marker.code, marker.name, *marker.rgb, int(count)))
+		writer.writerow(("code", "color_name", "red", "green", "blue", "polygon_count", "region_count"))
+		for index, marker in enumerate(palette):
+			writer.writerow((
+				marker.code,
+				marker.name,
+				*marker.rgb,
+				base_counts[index],
+				region_counts[index],
+			))

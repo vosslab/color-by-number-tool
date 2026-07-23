@@ -22,7 +22,7 @@ Output creation has two deliberately separate, representation-incompatible paths
   row-and-column semantics; square sampling; four-neighbor enhancement; and the existing CSV,
   summary, preview, and PDF writers. It remains the default.
 - The optional Voronoi path owns ordered sites and partition polygons, polygon-area samples,
-  one-dimensional site-identifier assignments, polygon-centroid label anchors, and dedicated
+  one-dimensional site-identifier assignments, measured contained-code placement, and dedicated
   polygon CSV, summary, preview, and PDF writers. Its strong enhancement uses shared polygon edges
   for adjacency. It generates and records an internal seed for the bounded site distribution.
 
@@ -85,12 +85,12 @@ because both pipelines process the same source image.
   settled clipped partition, averages owned fitted-raster pixel centers per polygon, assigns a
   palette code, and reconstructs a palette-colored raster.
 - [../colorbynumber/voronoi_preview_writer.py](../colorbynumber/voronoi_preview_writer.py) draws
-  polygon boundaries on palette-colored previews and writes equal-scale comparison panels.
+  `RenderRegion` boundaries on raster-backed previews and writes equal-scale comparison panels.
 - [../colorbynumber/voronoi_pdf_writer.py](../colorbynumber/voronoi_pdf_writer.py) writes blank,
-  numbered, and palette-reference Letter pages from ordered polygon assignments, placing codes at
-  the area centroid of their owned polygons.
+  numbered, and palette-reference Letter pages from the concrete `RenderRegion` tuple, placing
+  codes through shared measured-box containment placement.
 - [../colorbynumber/voronoi_csv_writer.py](../colorbynumber/voronoi_csv_writer.py) writes
-  site-ordered polygon assignments and palette usage.
+  site-ordered raw polygon assignments and palette usage.
 - [../colorbynumber/voronoi_summary_writer.py](../colorbynumber/voronoi_summary_writer.py) records
   resolved Voronoi inputs, the internal seed, color error, and label diagnostics.
 
@@ -108,10 +108,19 @@ because both pipelines process the same source image.
 
 ### Output writers
 
+- [../colorbynumber/render_regions.py](../colorbynumber/render_regions.py) turns assigned source
+  polygons into the one concrete `tuple[RenderRegion, ...]` used by every printable-region
+  consumer. It represents ordinary and unioned same-color shapes identically without changing the
+  raw assignments. [REGION_PIPELINE.md](REGION_PIPELINE.md) defines that lifecycle and contract.
+
+- `colorbynumber/label_placement.py` owns measured PDF-space code boxes, contained label anchors,
+  and maximum-clearance best-effort anchors without changing the `RenderRegion` geometry model.
+
 - [../colorbynumber/pdf_writer.py](../colorbynumber/pdf_writer.py) uses ReportLab to draw the
-  single-page Letter worksheet with square numbered cells and a colored marker key.
+  single-page Letter worksheet from concrete square render regions and a colored marker key.
 - [../colorbynumber/grid_only_pdf_writer.py](../colorbynumber/grid_only_pdf_writer.py) uses the same
-  ReportLab grid renderer for two aligned Letter pages: a gray blank grid and a black numbered grid.
+  ReportLab region renderer for two aligned Letter pages: a gray blank page and a black numbered
+  page.
 - [../colorbynumber/preview_writer.py](../colorbynumber/preview_writer.py) writes nearest-neighbor PNG
   previews so each sampled cell remains crisp.
 - [../colorbynumber/csv_writer.py](../colorbynumber/csv_writer.py) writes per-cell assignments and
@@ -122,7 +131,9 @@ because both pipelines process the same source image.
   [../colorbynumber/voronoi_pdf_writer.py](../colorbynumber/voronoi_pdf_writer.py), plus
   [../colorbynumber/voronoi_csv_writer.py](../colorbynumber/voronoi_csv_writer.py) and
   [../colorbynumber/voronoi_summary_writer.py](../colorbynumber/voronoi_summary_writer.py), own
-  the polygon outputs. They do not adapt square writers.
+  the polygon outputs. The PDF and preview writers consume the concrete `RenderRegion` tuple with
+  the domain and raster data they need; only the assignment CSV retains ordered raw polygons. They
+  do not adapt square writers.
 
 ## Production square data flow
 
@@ -134,11 +145,14 @@ because both pipelines process the same source image.
 4. Pillow resamples the fitted image to a NumPy array with one RGB triplet per cell.
 5. The matcher converts source and palette values to Lab, applies the selected enhancement, and
    produces a palette-index grid plus original-source Delta E errors.
-6. The index grid drives both ReportLab PDFs, the marker preview, two CSV files, and the summary.
-7. The sampled RGB grid independently drives the source preview.
+6. The coordinator always projects assignments into one concrete `tuple[RenderRegion, ...]`. Both
+   square PDFs, the marker key, legend counts, and summary region counts consume that tuple.
+7. The index grid remains the raw source for the assignment CSV and the palette-colored marker
+   preview. The sampled RGB grid independently drives the source preview.
 
-The index grid is the central invariant between renderers: every writer reads the same row and
-column assignment, so each cell keeps one marker code across PDF, PNG, and CSV outputs.
+The assignment grid remains the square path's audit invariant. The concrete render-region tuple is
+the separate printable-geometry invariant, so regular and unioned regions look identical to their
+consumers.
 
 ## Optional Voronoi data flow
 
@@ -156,16 +170,22 @@ column assignment, so each cell keeps one marker code across PDF, PNG, and CSV o
    the fitted pixel nearest its site, retaining the fallback identifier for diagnostics.
 7. It applies the square strong-preset thresholds to polygon samples, using shared-edge polygon
    neighbors for dark-detail comparison, then assigns one nearest palette color per site.
-8. One-dimensional ordered assignments drive the dedicated polygon CSV, summary, preview, and PDF
-   writers. PDF code anchors use each polygon's area centroid.
+8. The coordinator always projects the ordered assignments and cells into one concrete
+   `tuple[RenderRegion, ...]`. All three Voronoi PDF pages, boundary previews, legend counts, and
+   summary region counts consume that tuple; the assignment CSV remains site-ordered raw audit data.
+   PDF code placement begins at each region polygon's area centroid and uses the shared
+   PDF-space containment resolver when a measured padded box does not fit.
 
-The stable identifier is the Voronoi path's cross-writer invariant. It is not a row-and-column
-index, and it is never converted into a fake grid.
+The stable identifier is the Voronoi path's audit invariant. It is not a row-and-column index, and
+it is never converted into a fake grid. `RenderRegion.member_identifiers` preserve that traceability
+for printable geometry.
 
 ## Testing and verification
 
 - [../tests/test_color_by_number.py](../tests/test_color_by_number.py) verifies perceptual matching,
   enhancement selectivity, grid parsing, orientation, square-cell geometry, page counts, and codes.
+- [../tests/test_render_regions.py](../tests/test_render_regions.py) verifies the shared printable
+  region contract, topology, membership, and palette-bound validation.
 - [../tests/test_voronoi_geometry.py](../tests/test_voronoi_geometry.py) checks conditioning,
   degeneracies, topology, ownership, and cell-by-cell agreement with an independent half-plane
   oracle.
@@ -189,6 +209,9 @@ index, and it is never converted into a fake grid.
   call in [../colorbynumber/cli.py](../colorbynumber/cli.py).
 - Keep square printable geometry in the two existing PDF writer modules and reuse their
   `PageLayout` record when square pages must align.
+- Add a new complex source geometry through a builder in
+  [../colorbynumber/render_regions.py](../colorbynumber/render_regions.py), then preserve the
+  `RenderRegion` contract for all downstream consumers.
 - Keep the Voronoi coordinator separate from the square coordinator. It may share
   representation-independent utilities without changing square arrays or output semantics.
 

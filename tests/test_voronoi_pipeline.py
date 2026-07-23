@@ -54,6 +54,7 @@ def _arguments(tmp_path: pathlib.Path, output_name: str) -> argparse.Namespace:
 		page_orientation="auto",
 		grid_size=(3, 2),
 		enhancement="none",
+		merge_regions=False,
 	)
 	return args
 
@@ -121,6 +122,7 @@ def test_voronoi_pipeline_records_site_order_and_internal_seed(
 		result.seed == 2468
 		and "Layout: voronoi" in summary
 		and "Internal generated/replay seed: 2468" in summary
+		and "Best-effort labels: 0" in summary
 	)
 
 
@@ -157,7 +159,20 @@ def test_cli_parser_defaults_square_and_accepts_voronoi(
 	)
 	voronoi_args = colorbynumber.cli.parse_args()
 	assert default_args.layout == "square"
+	assert default_args.merge_regions is False
 	assert voronoi_args.layout == "voronoi"
+
+
+#============================================
+def test_cli_parser_enables_and_explicitly_disables_region_merging(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Region merging remains opt-in for both public layouts."""
+	monkeypatch.setattr(sys, "argv", ("color_by_number.py", "-i", "source.png", "-m"))
+	enabled = colorbynumber.cli.parse_args()
+	monkeypatch.setattr(sys, "argv", ("color_by_number.py", "-i", "source.png", "-M"))
+	disabled = colorbynumber.cli.parse_args()
+	assert enabled.merge_regions and not disabled.merge_regions
 
 
 #============================================
@@ -184,6 +199,7 @@ def test_cli_dispatches_each_layout_to_its_separate_coordinator(
 			page_orientation="landscape",
 			dimensions=(3, 2),
 			seed=99,
+			label_diagnostics=types.SimpleNamespace(best_effort_label_count=0),
 		)
 
 	monkeypatch.setattr(colorbynumber.cli, "generate_outputs", fake_square)

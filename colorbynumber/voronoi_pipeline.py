@@ -13,6 +13,7 @@ import numpy
 import colorbynumber.image_sampler
 import colorbynumber.orientation
 import colorbynumber.palette_loader
+import colorbynumber.render_regions
 import colorbynumber.voronoi_csv_writer
 import colorbynumber.voronoi_pdf_writer
 import colorbynumber.voronoi_preview_writer
@@ -79,6 +80,8 @@ def _write_summary(
 	errors: numpy.ndarray,
 	sample: colorbynumber.voronoi_prototype.PolygonRasterSample,
 	label_diagnostics: colorbynumber.voronoi_pdf_writer.LabelDiagnostics,
+	merge_regions: bool,
+	rendered_region_count: int,
 	output_path: pathlib.Path,
 ) -> None:
 	"""Write polygon-specific run metadata and color-assignment diagnostics."""
@@ -99,8 +102,13 @@ def _write_summary(
 		seam_fallback_pixel_count=sample.seam_fallback_pixel_count,
 		polygon_fallback_count=len(sample.polygon_fallback_identifiers),
 		label_font_size_points=label_diagnostics.font_size_points,
-		labels_outside_owned_cell_count=label_diagnostics.outside_owned_cell_count,
+		shifted_label_count=label_diagnostics.shifted_label_count,
+		best_effort_label_count=label_diagnostics.best_effort_label_count,
+		total_label_shift_points=label_diagnostics.total_shift_points,
+		maximum_label_shift_points=label_diagnostics.maximum_shift_points,
 		label_overlap_pair_count=label_diagnostics.overlap_pair_count,
+		merge_regions=merge_regions,
+		rendered_region_count=rendered_region_count,
 	)
 	colorbynumber.voronoi_summary_writer.write_summary(summary, output_path)
 
@@ -153,6 +161,12 @@ def generate_outputs(
 		palette,
 		args.enhancement,
 	)
+	merge_regions = args.merge_regions
+	regions = colorbynumber.render_regions.build_voronoi_regions(
+		partition,
+		indices,
+		merge_regions,
+	)
 	reconstruction_rgb = colorbynumber.voronoi_prototype.reconstruct_polygon_raster(
 		sample.ownership,
 		indices,
@@ -161,21 +175,23 @@ def generate_outputs(
 	paths = build_output_paths(args.output_file)
 	args.output_file.parent.mkdir(parents=True, exist_ok=True)
 	label_diagnostics = colorbynumber.voronoi_pdf_writer.write_pdf(
-		partition,
-		indices,
+		partition.domain,
 		palette,
 		page_orientation,
 		paths["diagram"],
+		regions,
 	)
 	colorbynumber.voronoi_preview_writer.write_polygon_preview(
 		reconstruction_rgb,
-		partition,
+		partition.domain,
 		paths["polygon preview"],
+		regions,
 	)
 	colorbynumber.voronoi_preview_writer.write_polygon_preview(
 		sample.fitted_rgb,
-		partition,
+		partition.domain,
 		paths["source preview"],
+		regions,
 	)
 	colorbynumber.voronoi_csv_writer.write_assignments_csv(
 		partition,
@@ -186,9 +202,9 @@ def generate_outputs(
 		paths["assignments"],
 	)
 	colorbynumber.voronoi_csv_writer.write_legend_csv(
-		indices,
 		palette,
 		paths["legend"],
+		regions,
 	)
 	_write_summary(
 		args,
@@ -198,6 +214,8 @@ def generate_outputs(
 		errors,
 		sample,
 		label_diagnostics,
+		merge_regions,
+		len(regions),
 		paths["summary"],
 	)
 	result = VoronoiPipelineResult(

@@ -40,8 +40,10 @@ The bundled example is [../palettes/aoartix_48.yml](../palettes/aoartix_48.yml).
 - `<stem>.pdf` is one Letter marker-key worksheet with a numbered grid and colored side key.
 - `<stem>_grid_only.pdf` contains two aligned Letter pages.
 - Page one of the full-grid PDF has gray lines and no codes.
-- Page two has black lines and one marker code per cell.
+- Page two has black lines and one marker code per cell by default.
 - Both full-grid pages maximize perfect squares inside a 0.6-inch minimum margin.
+- With `--merge-regions`, edge-adjacent same-color cells render as one boundary and one code; the
+  blank page remains code-free.
 
 ## Square PNG previews
 
@@ -65,22 +67,31 @@ The bundled example is [../palettes/aoartix_48.yml](../palettes/aoartix_48.yml).
 ## Square legend CSV
 
 `<stem>_legend.csv` contains every palette entry with `code`, `color_name`, RGB channels, and
-`square_count`. Unused markers remain present with a zero count.
+`square_count` and `region_count`. Unused markers remain present with zero counts. The assignment
+CSV remains one row per original square even when PDF regions merge.
 
 ## Square summary text
 
 `<stem>_summary.txt` records the input and palette paths, grid dimensions, assignment count, fit
-mode, page orientation, matching metric, enhancement preset, and mean and maximum Delta E 76.
+mode, page orientation, matching metric, enhancement preset, and mean and maximum Delta E 76. It
+also records whether same-color merging is enabled, the base square count, rendered-region count,
+and region-count reduction.
 
 ## Voronoi PDF output
 
 With `--layout voronoi`, `<stem>.pdf` is a three-page Letter polygon worksheet. The page order is
 fixed:
 
-1. Blank artwork: white polygons with light-gray boundaries and no codes.
-2. Numbered reference: white polygons with black boundaries and one marker code at each polygon's
-   area centroid.
-3. Palette reference: polygons filled with their assigned palette RGB colors and dark boundaries.
+1. Blank artwork: white printable regions with light-gray boundaries and no codes.
+2. Numbered reference: white printable regions with black boundaries and one marker code whose
+   measured padded glyph box is strictly contained when the region is large enough.
+3. Palette reference: printable regions filled with their assigned palette RGB colors and dark
+   boundaries.
+
+With `--merge-regions`, all three pages use the connected same-color region boundaries; holes remain
+visible, and each numbered region receives one code. The area centroid remains the preferred
+anchor; a deterministic shift finds a contained box when possible, while an undersized region uses
+its maximum-clearance interior point as a recorded best-effort placement.
 
 The resolved `-g COLUMNSxROWS` still chooses the page aspect and site count `N = COLUMNS * ROWS`.
 It does not define rows or columns of polygon assignments.
@@ -88,8 +99,9 @@ It does not define rows or columns of polygon assignments.
 ## Voronoi PNG previews
 
 - `<stem>_source_preview.png` shows the fitted source image before palette assignment.
-- `<stem>_polygon_preview.png` shows the palette-colored Voronoi polygons with their boundaries.
-- The previews are visual checks; the PDF polygon geometry is authoritative.
+- `<stem>_polygon_preview.png` shows palette-colored pixels with printable-region boundaries.
+- Both previews use raster pixels for their colors and the same printable-region boundaries as the
+  PDF. They are visual checks; PDF geometry is authoritative.
 
 ## Voronoi assignment CSV
 
@@ -105,15 +117,16 @@ It does not define rows or columns of polygon assignments.
 | `red`, `green`, `blue` | Selected palette RGB channels. |
 | `delta_e_76` | CIE Delta E 76 matching error for the polygon sample and selected marker color. |
 
-Rows follow increasing `site_identifier`, which is the geometry ownership order used by polygon
-sampling, the numbered PDF page, and the preview writer. It is deliberately distinct from the
-one-based square `row` and `column` coordinates.
+Rows follow increasing `site_identifier`, the geometry ownership order used for polygon sampling.
+The assignment CSV retains that stable raw site order even when printable regions merge. It is
+deliberately distinct from the one-based square `row` and `column` coordinates.
 
 ## Voronoi legend CSV
 
 `<stem>_legend.csv` contains every palette entry with `code`, `color_name`, RGB channels, and
-`polygon_count`. Unused markers remain present with a zero count. `polygon_count` replaces the
-square layout's `square_count` because the rows describe polygon assignments.
+`polygon_count` and `region_count`. Unused markers remain present with zero counts.
+`polygon_count` replaces the square layout's `square_count` because the rows describe polygon
+assignments.
 
 ## Voronoi summary text
 
@@ -126,7 +139,10 @@ square layout's `square_count` because the rows describe polygon assignments.
 - Polygon-area sampling policy, numerical-seam fallback pixel count, and zero-pixel-polygon
   fallback count.
 - Matching metric plus mean and maximum Delta E 76 error.
-- Centroid-label diagnostics: font size, labels outside their owned polygon, and overlapping label
-  pairs.
+- Label diagnostics: font size, shifted-label count, best-effort-label count, total and maximum
+  shift in points, and overlapping final-label pairs. Labels use a strictly contained
+  `0.25`-point padded box whenever one fits.
+- Same-color merge status, base Voronoi polygon count, rendered-region count, and region-count
+  reduction.
 
 The seed is recorded for reproduction but is not a user-facing layout parameter.

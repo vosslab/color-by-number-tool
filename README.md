@@ -1,6 +1,7 @@
 # Color-by-number tool
 
-Turn any photograph into a printable, configurable color-by-number pattern for artists who need exactly one Aoartix marker code in every unfilled square, oriented to match the source.
+Turn any photograph into a printable, configurable color-by-number pattern for artists who need
+exactly one Aoartix marker code in every unfilled square by default, oriented to match the source.
 
 <!-- screenshots:begin (managed by screenshot-docs) -->
 ![Aligned 86 by 60 blank gray grid and black numbered marker-code reference page](docs/screenshots/paired_artwork_pages.png)
@@ -9,11 +10,14 @@ Turn any photograph into a printable, configurable color-by-number pattern for a
 ## From photo to 5,160 decisions
 
 The tool reduces a photograph to a strict physical worksheet instead of a blended digital effect.
-Every square is an independent, usable marker decision:
+By default, every square is an independent, usable marker decision:
 
 - 86 columns by 60 rows in landscape by default, or 60 columns by 86 rows in portrait.
 - Configurable grid resolution through `-g COLUMNSxROWS` or `--grid COLUMNSxROWS`.
-- One printed marker code in every square, including codes such as `120` and `BG7`.
+- Optional `-m` merging of edge-adjacent shapes assigned the same marker code into one printable
+  region.
+- By default, one printed marker code in every square; with `-m`, one code in each connected
+  same-color printable region, including codes such as `120` and `BG7`.
 - White worksheet cells with black grid lines and no pre-colored boxes.
 - Sharp ReportLab vector PDFs with square cells and measured Letter-page margins.
 - Perceptual matching against the supplied 48-color Aoartix marker set.
@@ -102,8 +106,8 @@ published comparison so other readers can reproduce the same test.
 | `color_by_number_marker_preview.png` | The photograph reconstructed with marker colors. |
 | `color_by_number_source_preview.png` | The unquantized, orientation-matched source-color reference. |
 | `color_by_number_assignments.csv` | The code, name, and RGB choice for every grid position. |
-| `color_by_number_legend.csv` | Every palette entry and its assigned square count. |
-| `color_by_number_summary.txt` | Grid invariants, fit mode, enhancement preset, and Delta E metrics. |
+| `color_by_number_legend.csv` | Every palette entry with base square and rendered-region counts. |
+| `color_by_number_summary.txt` | Grid and merge settings, base and rendered-region counts, reduction, and Delta E metrics. |
 
 Use `-o output/pdf/family_portrait.pdf` to choose the worksheet filename. All companion files inherit
 the `family_portrait` stem. Use `-f contain` to preserve the complete source image instead of center
@@ -128,6 +132,8 @@ median flat-background color sampled from its reference-chart swatch.
 
 - [docs/INSTALL.md](docs/INSTALL.md): Python 3.12 requirements and dependency setup.
 - [docs/USAGE.md](docs/USAGE.md): fitting, sizing, custom palette, and output options.
+- [docs/REGION_PIPELINE.md](docs/REGION_PIPELINE.md): printable-region lifecycle, merging, and
+  renderer handoff.
 - [docs/CODE_ARCHITECTURE.md](docs/CODE_ARCHITECTURE.md): pipeline stages, module boundaries, and
   data flow.
 - [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md): source, palette, test, and generated-output

@@ -1,9 +1,23 @@
+## 2026-07-23
+
+### Behavior or Interface Changes
+
+- Changed impossible PDF label fits from a fatal error to a recorded best-effort placement. Labels
+  still preserve the centroid or shift to a fully contained padded box whenever possible; regions
+  too small for the full code now use their maximum-clearance interior point so PDF generation
+  completes.
+
 ## 2026-07-22
 
 ### Additions and New Features
 
 - Added a Python 3.12 converter that creates a strict 43 by 30 code-only PDF worksheet, source and
   marker previews, per-cell assignments, a marker legend, and color-distance metrics.
+- Added opt-in `-m`/`--merge-regions` output merging for edge-adjacent same-color square and Voronoi
+  shapes. PDFs, Voronoi boundary previews, legends, and summaries now report rendered regions while
+  assignment CSVs preserve their original per-square or per-polygon audit rows.
+- Added [REGION_PIPELINE.md](REGION_PIPELINE.md), a start-to-finish reference for the shared
+  printable-region lifecycle and its source-to-output invariants.
 - Added the 48-color Aoartix palette in YAML using median RGB values sampled from the supplied
   product chart, including numeric, grey-series, and blue-grey codes.
 - Added focused unit tests and installation, usage, and vision-pipeline documentation.
@@ -78,6 +92,11 @@
 
 ### Fixes and Maintenance
 
+- Initially made square and Voronoi code labels fail when no strictly contained padded placement
+  fit. Writers measure ReportLab glyph boxes in PDF points, preserve fitting centroids, and
+  deterministically shift non-fitting labels; the 2026-07-23 policy supersedes the fatal case.
+- Corrected region-pipeline references so previews, PDFs, CSV audit rows, and summaries describe
+  their distinct rendered-region and raster or raw-assignment responsibilities accurately.
 - Corrected analytical half-plane clipping to use an exact-zero, midpoint-stable algebraic
   predicate, preserving complementary cells for sites just beyond the duplicate tolerance.
 - Separated coordinate-bound containment, positive individual-cell area, and aggregate area-error
@@ -171,10 +190,11 @@
 - Kept local unclumping, alternate movement fractions, boundary forces, and production integration
   outside the fixed Milestone 2B screen because step `2` answered the current spacing question;
   retained explicit reconsideration triggers if image or print validation changes that conclusion.
-- Accepted area-centroid label alignment as good enough for the optional Voronoi pathway. It does
-  not guarantee containment or collision-free text; boundary crossings remain, and `60x86` is too
-  dense for dependable single-page code reading. Neither limitation reopens the selected point
-  distribution.
+- The earlier optional-Voronoi prototype accepted area-centroid label alignment despite boundary
+  crossings and dense `60x86` labels. The strict contained-label resolver now supersedes that
+  prototype decision; it preserves fitting centroids and shifts non-fitting labels. Its initial
+  rejection of impossible placements was superseded by the 2026-07-23 best-effort policy.
+  Printable density remains a separate design consideration.
 
 ### Developer Tests and Notes
 

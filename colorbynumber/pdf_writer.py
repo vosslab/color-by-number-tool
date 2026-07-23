@@ -11,10 +11,14 @@ import reportlab.lib.colors
 import reportlab.lib.pagesizes
 import reportlab.pdfbase.pdfmetrics
 import reportlab.pdfgen.canvas
+import shapely
+import shapely.affinity
 
 # local repo modules
 import colorbynumber.constants
+import colorbynumber.label_placement
 import colorbynumber.marker_color
+import colorbynumber.render_regions
 
 
 POINTS_PER_INCH = 72.0
@@ -134,25 +138,10 @@ def calculate_code_font_size(
 
 
 #============================================
-def centered_text_baseline(y_center: float, font_name: str, font_size: float) -> float:
-	"""Return the baseline that centers a font's measured glyph box vertically.
-
-	Args:
-		y_center: Desired vertical center in PDF points.
-		font_name: Registered ReportLab font name.
-		font_size: Font size in points.
-
-	Returns:
-		The baseline position in PDF points.
-	"""
-	ascent = reportlab.pdfbase.pdfmetrics.getAscent(font_name) * font_size / 1000.0
-	descent = reportlab.pdfbase.pdfmetrics.getDescent(font_name) * font_size / 1000.0
-	baseline = y_center - (ascent + descent) / 2.0
-	return baseline
-
-
-#============================================
-def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None:
+def draw_header(
+	pdf: reportlab.pdfgen.canvas.Canvas,
+	layout: PageLayout,
+) -> None:
 	"""Draw the compact worksheet title and grid contract.
 
 	Args:
@@ -171,7 +160,7 @@ def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 	pdf.drawString(
 		layout.grid_x,
 		title_y - 10.0,
-		"One marker code per square. Grid boxes are intentionally unfilled.",
+		"One marker code per printable region. Shapes are intentionally unfilled.",
 	)
 	header_y = title_y - 3.0
 	pdf.setFillColor(reportlab.lib.colors.black)
@@ -185,7 +174,7 @@ def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 	)
 	pdf.setFillColor(reportlab.lib.colors.white)
 	pdf.setFont("Helvetica-Bold", 7.2)
-	key_title_baseline = centered_text_baseline(
+	key_title_baseline = colorbynumber.label_placement.centered_text_baseline(
 		header_y + KEY_HEADER_HEIGHT / 2.0,
 		"Helvetica-Bold",
 		7.2,
@@ -198,22 +187,71 @@ def draw_header(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 
 
 #============================================
-def draw_code_grid(
+def _region_path(
 	pdf: reportlab.pdfgen.canvas.Canvas,
 	layout: PageLayout,
-	indices: numpy.ndarray,
-	palette: list[colorbynumber.marker_color.MarkerColor],
-) -> None:
-	"""Draw the white grid and one black code per cell.
+	polygon: shapely.Polygon,
+) -> reportlab.pdfgen.pathobject.PDFPathObject:
+	"""Map a normalized square-grid polygon, including holes, to a PDF path."""
+	path = pdf.beginPath()
+	for ring in (polygon.exterior, *polygon.interiors):
+		coordinates = list(ring.coords)
+		first_x, first_y = coordinates[0]
+		path.moveTo(
+			layout.grid_x + first_x * layout.cell_size,
+			layout.grid_y + first_y * layout.cell_size,
+		)
+		for x, y in coordinates[1:]:
+			path.lineTo(layout.grid_x + x * layout.cell_size, layout.grid_y + y * layout.cell_size)
+		path.close()
+	return path
 
-	Args:
-		pdf: ReportLab canvas for the output page.
-		layout: Computed page layout.
-		indices: Palette index for every grid square.
-		palette: Available marker colors.
-	"""
-	columns = layout.columns
-	rows = layout.rows
+
+#============================================
+def _region_polygon_pdf(
+	layout: PageLayout,
+	polygon: shapely.Polygon,
+) -> shapely.Polygon:
+	"""Transform one normalized square region into physical PDF-point coordinates."""
+	scaled = shapely.affinity.scale(
+		polygon,
+		xfact=layout.cell_size,
+		yfact=layout.cell_size,
+		origin=(0.0, 0.0),
+	)
+	pdf_polygon = shapely.affinity.translate(scaled, xoff=layout.grid_x, yoff=layout.grid_y)
+	return pdf_polygon
+
+
+#============================================
+def resolve_code_placements(
+	layout: PageLayout,
+	palette: list[colorbynumber.marker_color.MarkerColor],
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+) -> tuple[colorbynumber.label_placement.LabelPlacement, ...]:
+	"""Resolve every square-region code once in shared physical PDF coordinates."""
+	font_size = calculate_code_font_size(layout, palette)
+	placements = tuple(
+		colorbynumber.label_placement.place_label(
+			_region_polygon_pdf(layout, region.polygon),
+			palette[region.palette_index].code,
+			CODE_FONT_NAME,
+			font_size,
+			region.member_identifiers,
+		)
+		for region in regions
+	)
+	return placements
+
+
+#============================================
+def draw_code_regions(
+	pdf: reportlab.pdfgen.canvas.Canvas,
+	layout: PageLayout,
+	palette: list[colorbynumber.marker_color.MarkerColor],
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+) -> None:
+	"""Draw one outlined, numbered printable shape for each region."""
 	pdf.setFillColor(reportlab.lib.colors.white)
 	pdf.rect(
 		layout.grid_x,
@@ -225,13 +263,63 @@ def draw_code_grid(
 	)
 	pdf.setStrokeColor(reportlab.lib.colors.black)
 	pdf.setLineWidth(0.3)
-	for column in range(columns + 1):
-		x_position = layout.grid_x + column * layout.cell_size
-		pdf.line(x_position, layout.grid_y, x_position, layout.grid_y + layout.grid_height)
-	for row in range(rows + 1):
-		y_position = layout.grid_y + row * layout.cell_size
-		pdf.line(layout.grid_x, y_position, layout.grid_x + layout.grid_width, y_position)
+	for region in regions:
+		pdf.drawPath(
+			_region_path(pdf, layout, region.polygon),
+			stroke=1,
+			fill=1,
+			fillMode=0,
+		)
+	pdf.setLineWidth(0.7)
+	pdf.rect(
+		layout.grid_x,
+		layout.grid_y,
+		layout.grid_width,
+		layout.grid_height,
+		stroke=1,
+		fill=0,
+	)
+	font_size = calculate_code_font_size(layout, palette)
+	placements = resolve_code_placements(layout, palette, regions)
+	pdf.setFillColor(reportlab.lib.colors.black)
+	pdf.setFont(CODE_FONT_NAME, font_size)
+	for region, placement in zip(regions, placements, strict=True):
+		baseline = colorbynumber.label_placement.centered_text_baseline(
+			placement.anchor[1], CODE_FONT_NAME, font_size
+		)
+		pdf.drawCentredString(
+			placement.anchor[0],
+			baseline,
+			palette[region.palette_index].code,
+		)
 
+
+#============================================
+def draw_blank_regions(
+	pdf: reportlab.pdfgen.canvas.Canvas,
+	layout: PageLayout,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
+	line_gray: float = 0.72,
+) -> None:
+	"""Draw a code-free printable-region worksheet page."""
+	pdf.setFillColor(reportlab.lib.colors.white)
+	pdf.rect(
+		layout.grid_x,
+		layout.grid_y,
+		layout.grid_width,
+		layout.grid_height,
+		stroke=0,
+		fill=1,
+	)
+	pdf.setStrokeColorRGB(line_gray, line_gray, line_gray)
+	pdf.setLineWidth(0.3)
+	for region in regions:
+		pdf.drawPath(
+			_region_path(pdf, layout, region.polygon),
+			stroke=1,
+			fill=1,
+			fillMode=0,
+		)
 	pdf.setLineWidth(0.7)
 	pdf.rect(
 		layout.grid_x,
@@ -242,34 +330,23 @@ def draw_code_grid(
 		fill=0,
 	)
 
-	font_size = calculate_code_font_size(layout, palette)
-	pdf.setFillColor(reportlab.lib.colors.black)
-	pdf.setFont(CODE_FONT_NAME, font_size)
-	for row in range(rows):
-		for column in range(columns):
-			marker = palette[int(indices[row, column])]
-			x_center = layout.grid_x + (column + 0.5) * layout.cell_size
-			y_center = layout.grid_y + layout.grid_height - (row + 0.5) * layout.cell_size
-			baseline = centered_text_baseline(y_center, CODE_FONT_NAME, font_size)
-			pdf.drawCentredString(x_center, baseline, marker.code)
-
 
 #============================================
 def draw_color_key(
 	pdf: reportlab.pdfgen.canvas.Canvas,
 	layout: PageLayout,
-	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
 	"""Draw colored key swatches for marker codes used by the worksheet.
 
 	Args:
 		pdf: ReportLab canvas for the output page.
 		layout: Computed page layout.
-		indices: Palette index for every grid square.
 		palette: Available marker colors.
+		regions: Concrete printable regions counted by marker code.
 	"""
-	counts = numpy.bincount(indices.reshape(-1), minlength=len(palette))
+	counts = numpy.bincount([region.palette_index for region in regions], minlength=len(palette))
 	used_entries = [
 		(marker, int(count))
 		for marker, count in zip(palette, counts, strict=True)
@@ -323,21 +400,25 @@ def draw_footer(pdf: reportlab.pdfgen.canvas.Canvas, layout: PageLayout) -> None
 
 #============================================
 def write_pdf(
-	indices: numpy.ndarray,
 	palette: list[colorbynumber.marker_color.MarkerColor],
 	page_orientation: str,
+	columns: int,
+	rows: int,
 	output_path: pathlib.Path,
+	regions: tuple[colorbynumber.render_regions.RenderRegion, ...],
 ) -> None:
-	"""Write the complete single-page Letter PDF.
+	"""Write the complete single-page Letter PDF from concrete render regions.
 
 	Args:
-		indices: Palette index for every grid square.
 		palette: Available marker colors.
 		page_orientation: Resolved landscape or portrait orientation.
+		columns: Number of square columns.
+		rows: Number of square rows.
 		output_path: Destination PDF path.
+		regions: Concrete printable regions derived from square assignments.
 	"""
-	rows, columns = indices.shape
 	layout = calculate_layout(page_orientation, columns, rows)
+	colorbynumber.render_regions.validate_regions(regions, len(palette))
 	page_size = (layout.page_width, layout.page_height)
 	pdf = reportlab.pdfgen.canvas.Canvas(str(output_path), pagesize=page_size)
 	pdf.setTitle(f"{columns} x {rows} color-by-number worksheet")
@@ -345,8 +426,8 @@ def write_pdf(
 	pdf.setSubject("Printable marker-code grid with an Aoartix marker key")
 	pdf.setCreator("color-by-number-tool")
 	draw_header(pdf, layout)
-	draw_code_grid(pdf, layout, indices, palette)
-	draw_color_key(pdf, layout, indices, palette)
+	draw_code_regions(pdf, layout, palette, regions)
+	draw_color_key(pdf, layout, palette, regions)
 	draw_footer(pdf, layout)
 	pdf.showPage()
 	pdf.save()

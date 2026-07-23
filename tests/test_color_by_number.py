@@ -1,4 +1,5 @@
 # Standard Library
+import csv
 import math
 import pathlib
 
@@ -12,13 +13,17 @@ import reportlab.pdfbase.pdfmetrics
 # local repo modules
 import colorbynumber.constants
 import colorbynumber.color_matcher
+import colorbynumber.csv_writer
 import colorbynumber.grid_only_pdf_writer
 import colorbynumber.image_sampler
+import colorbynumber.label_placement
 import colorbynumber.marker_color
 import colorbynumber.orientation
 import colorbynumber.palette_loader
 import colorbynumber.pdf_writer
+import colorbynumber.render_regions
 import colorbynumber.repo_paths
+import colorbynumber.summary_writer
 
 
 def test_assign_marker_colors_uses_perceptual_nearest_color() -> None:
@@ -191,14 +196,105 @@ def test_grid_only_writer_makes_blank_and_numbered_pages(tmp_path: pathlib.Path)
 	palette = [colorbynumber.marker_color.MarkerColor("120", "Black", (14, 14, 14))]
 	output_path = tmp_path / "artwork.pdf"
 	colorbynumber.grid_only_pdf_writer.write_pdf(
-		indices,
 		palette,
 		"landscape",
+		3,
+		2,
 		output_path,
+		colorbynumber.render_regions.build_square_regions(indices, False),
 	)
 	reader = pypdf.PdfReader(output_path)
 	assert reader.get_num_pages() == 2
 	assert not reader.pages[0].extract_text() and "120" in reader.pages[1].extract_text()
+
+
+#============================================
+def test_square_pdf_writes_a_strictly_contained_code_box(tmp_path: pathlib.Path) -> None:
+	palette = [colorbynumber.marker_color.MarkerColor("WIDE", "wide", (14, 14, 14))]
+	regions = colorbynumber.render_regions.build_square_regions(
+		numpy.array(((0,),), dtype=numpy.int64), False
+	)
+	output_path = tmp_path / "contained.pdf"
+	colorbynumber.pdf_writer.write_pdf(palette, "landscape", 1, 1, output_path, regions)
+	positions: list[tuple[float, float, float]] = []
+
+	def record_position(
+		text: str,
+		_user_matrix: list[float],
+		text_matrix: list[float],
+		_font_dictionary: object,
+		font_size: float,
+	) -> None:
+		"""Collect the worksheet code rather than the marker-key text."""
+		if text.strip() == "WIDE":
+			positions.append((text_matrix[4], text_matrix[5], font_size))
+
+	pypdf.PdfReader(output_path).pages[0].extract_text(visitor_text=record_position)
+	text_x, baseline, font_size = positions[0]
+	code_width = reportlab.pdfbase.pdfmetrics.stringWidth("WIDE", "Helvetica-Bold", font_size)
+	ascent = reportlab.pdfbase.pdfmetrics.getAscent("Helvetica-Bold") * font_size / 1000.0
+	descent = reportlab.pdfbase.pdfmetrics.getDescent("Helvetica-Bold") * font_size / 1000.0
+	anchor = (text_x + code_width / 2.0, baseline + (ascent + descent) / 2.0)
+	actual_box = colorbynumber.label_placement.text_box(
+		anchor, "WIDE", "Helvetica-Bold", font_size
+	)
+	layout = colorbynumber.pdf_writer.calculate_layout("landscape", 1, 1)
+	physical_region = colorbynumber.pdf_writer._region_polygon_pdf(layout, regions[0].polygon)
+	assert physical_region.contains_properly(
+		colorbynumber.label_placement.padded_text_box(actual_box, 0.25)
+	)
+
+
+#============================================
+def test_merged_square_pdfs_use_one_code_for_one_connected_region(tmp_path: pathlib.Path) -> None:
+	"""Merged square output reduces a uniform four-cell assignment to one printed code."""
+	indices = numpy.zeros((2, 2), dtype=numpy.int64)
+	palette = [colorbynumber.marker_color.MarkerColor("120", "Black", (14, 14, 14))]
+	key_path = tmp_path / "key.pdf"
+	artwork_path = tmp_path / "artwork.pdf"
+	regions = colorbynumber.render_regions.build_square_regions(indices, True)
+	colorbynumber.pdf_writer.write_pdf(palette, "landscape", 2, 2, key_path, regions)
+	colorbynumber.grid_only_pdf_writer.write_pdf(
+		palette, "landscape", 2, 2, artwork_path, regions
+	)
+	key_reader = pypdf.PdfReader(key_path)
+	artwork_reader = pypdf.PdfReader(artwork_path)
+	assert key_reader.pages[0].extract_text().count("120") == 2
+	assert (
+		not artwork_reader.pages[0].extract_text()
+		and artwork_reader.pages[1].extract_text().count("120") == 1
+	)
+
+
+#============================================
+def test_square_legend_records_base_and_rendered_region_counts(tmp_path: pathlib.Path) -> None:
+	indices = numpy.zeros((1, 2), dtype=numpy.int64)
+	palette = [colorbynumber.marker_color.MarkerColor("120", "Black", (14, 14, 14))]
+	regions = colorbynumber.render_regions.build_square_regions(indices, True)
+	output_path = tmp_path / "legend.csv"
+	colorbynumber.csv_writer.write_legend_csv(palette, output_path, regions)
+	with output_path.open(newline="", encoding="utf-8") as handle:
+		row = next(csv.DictReader(handle))
+	assert (row["square_count"], row["region_count"]) == ("2", "1")
+
+
+#============================================
+def test_square_summary_records_region_reduction(tmp_path: pathlib.Path) -> None:
+	output_path = tmp_path / "summary.txt"
+	colorbynumber.summary_writer.write_summary(
+		pathlib.Path("source.png"),
+		pathlib.Path("palette.yml"),
+		"crop",
+		"landscape",
+		"none",
+		numpy.zeros((1, 2)),
+		output_path,
+		True,
+		1,
+	)
+	text = output_path.read_text(encoding="utf-8")
+	assert "Merge same-color regions: enabled" in text
+	assert "Square assignments: 2" in text and "Rendered regions: 1 (reduction: 1)" in text
 
 
 @pytest.mark.parametrize(
@@ -217,7 +313,14 @@ def test_pdf_writer_makes_one_letter_page(
 	indices = numpy.zeros(grid_shape, dtype=numpy.int64)
 	palette = [colorbynumber.marker_color.MarkerColor("120", "Black", (14, 14, 14))]
 	output_path = tmp_path / f"{page_orientation}.pdf"
-	colorbynumber.pdf_writer.write_pdf(indices, palette, page_orientation, output_path)
+	colorbynumber.pdf_writer.write_pdf(
+		palette,
+		page_orientation,
+		grid_shape[1],
+		grid_shape[0],
+		output_path,
+		colorbynumber.render_regions.build_square_regions(indices, False),
+	)
 	reader = pypdf.PdfReader(output_path)
 	page = reader.pages[0]
 	actual_page_size = (float(page.mediabox.width), float(page.mediabox.height))

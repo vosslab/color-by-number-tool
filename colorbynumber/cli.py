@@ -14,6 +14,7 @@ import colorbynumber.orientation
 import colorbynumber.palette_loader
 import colorbynumber.pdf_writer
 import colorbynumber.preview_writer
+import colorbynumber.render_regions
 import colorbynumber.repo_paths
 import colorbynumber.summary_writer
 import colorbynumber.voronoi_pipeline
@@ -34,6 +35,15 @@ def parse_args() -> argparse.Namespace:
 	parser.add_argument(
 		"-i", "--input", dest="input_file", type=pathlib.Path, required=True,
 		help="Input image",
+	)
+	merge_group = parser.add_mutually_exclusive_group()
+	merge_group.add_argument(
+		"-m", "--merge-regions", dest="merge_regions", action="store_true",
+		help="Merge edge-adjacent shapes assigned the same marker code",
+	)
+	merge_group.add_argument(
+		"-M", "--no-merge-regions", dest="merge_regions", action="store_false",
+		help="Keep one printed shape per assigned square or polygon (default)",
 	)
 	parser.add_argument(
 		"-o", "--output", dest="output_file", type=pathlib.Path,
@@ -87,6 +97,7 @@ def parse_args() -> argparse.Namespace:
 	)
 	parser.set_defaults(
 		page_orientation=colorbynumber.constants.AUTO_ORIENTATION,
+		merge_regions=False,
 	)
 	args = parser.parse_args()
 	return args
@@ -156,25 +167,31 @@ def generate_outputs(
 		args.enhancement,
 	)
 	marker_grid = colorbynumber.color_matcher.palette_grid_rgb(indices, palette)
+	merge_regions = args.merge_regions
+	regions = colorbynumber.render_regions.build_square_regions(indices, merge_regions)
 	paths = build_output_paths(args.output_file)
 	args.output_file.parent.mkdir(parents=True, exist_ok=True)
 
 	colorbynumber.pdf_writer.write_pdf(
-		indices,
 		palette,
 		page_orientation,
+		columns,
+		rows,
 		paths["diagram"],
+		regions,
 	)
 	colorbynumber.grid_only_pdf_writer.write_pdf(
-		indices,
 		palette,
 		page_orientation,
+		columns,
+		rows,
 		paths["artwork pages"],
+		regions,
 	)
 	colorbynumber.preview_writer.write_preview(marker_grid, paths["marker preview"])
 	colorbynumber.preview_writer.write_preview(source_grid, paths["source preview"])
 	colorbynumber.csv_writer.write_assignments_csv(indices, palette, paths["assignments"])
-	colorbynumber.csv_writer.write_legend_csv(indices, palette, paths["legend"])
+	colorbynumber.csv_writer.write_legend_csv(palette, paths["legend"], regions)
 	colorbynumber.summary_writer.write_summary(
 		args.input_file,
 		args.palette_file,
@@ -183,6 +200,8 @@ def generate_outputs(
 		args.enhancement,
 		errors,
 		paths["summary"],
+		merge_regions,
+		len(regions),
 	)
 	dimensions = (columns, rows)
 	return paths, page_orientation, dimensions
@@ -195,12 +214,14 @@ def main() -> None:
 	if args.layout == "square":
 		paths, page_orientation, dimensions = generate_outputs(args)
 		internal_seed = None
+		best_effort_label_count = 0
 	elif args.layout == "voronoi":
 		result = colorbynumber.voronoi_pipeline.generate_outputs(args)
 		paths = result.paths
 		page_orientation = result.page_orientation
 		dimensions = result.dimensions
 		internal_seed = result.seed
+		best_effort_label_count = result.label_diagnostics.best_effort_label_count
 	else:
 		raise ValueError(f"Unsupported layout: {args.layout}")
 	columns, rows = dimensions
@@ -211,3 +232,5 @@ def main() -> None:
 		print(f"  {label}: {path}")
 	if internal_seed is not None:
 		print(f"  internal seed: {internal_seed}")
+	if best_effort_label_count > 0:
+		print(f"  best-effort labels: {best_effort_label_count}")
